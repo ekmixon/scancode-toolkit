@@ -424,20 +424,16 @@ class StructuredCopyrightProcessor(DebianDetector):
                 if not is_paragraph_debian_packaging(license_detection.paragraph)
             ]
 
-        expressions = [
+        if expressions := [
             license_detection.license_expression_object
             for license_detection in license_detections
             if license_detection.license_expression_object != None
-        ]
-
-        if expressions:
+        ]:
             license_expression = str(combine_expressions(expressions, unique=False))
+        elif license_matches := list(self.license_matches):
+            license_expression = get_license_expression_from_matches(license_matches)
         else:
-            license_matches = list(self.license_matches)
-            if license_matches:
-                license_expression = get_license_expression_from_matches(license_matches)
-            else:
-                raise_no_license_found_error(location=self.location)
+            raise_no_license_found_error(location=self.location)
 
         if simplify_licenses:
             return dedup_expression(license_expression=license_expression)
@@ -498,8 +494,9 @@ class StructuredCopyrightProcessor(DebianDetector):
             return license_detections
 
         license_detections.append(debian_licensing.get_license_detection(paragraph))
-        extra_license_detections = get_license_detections_from_extra_data(paragraph)
-        if extra_license_detections:
+        if extra_license_detections := get_license_detections_from_extra_data(
+            paragraph
+        ):
             license_detections.extend(extra_license_detections)
         return license_detections
 
@@ -608,14 +605,13 @@ class DebianLicenseSymbol:
         from the list of LicenseMatch objects.
         """
         assert self.matches, f'Cannot build expression from empty matches: {self}'
-        if len(self.matches) > 1:
-            expression = licensing.AND(
+        return (
+            licensing.AND(
                 *[match.rule.license_expression_object for match in self.matches]
             )
-        else:
-            expression = self.matches[0].rule.license_expression_object
-
-        return expression
+            if len(self.matches) > 1
+            else self.matches[0].rule.license_expression_object
+        )
 
 
 @attr.s
@@ -744,7 +740,7 @@ class DebianLicensing:
                     license_matches=matches_unparsable_expression,
                 )
 
-        if normalized_expression == None:
+        if normalized_expression is None:
             # Case where expression is not parsable and the same expression is not present in
             # the license paragraphs
             matches = add_unknown_matches(name=exp, text=None)
@@ -775,8 +771,7 @@ class DebianLicensing:
             text_matches = get_license_matches(query_string=text)
             matches = []
 
-            common_license = common_licenses.get(name)
-            if common_license:
+            if common_license := common_licenses.get(name):
                 # For common license the name has a meaning, so create a synthetic match on that
                 common_license_tag = f'License: {name}'
                 common_license_matches = get_license_matches(
@@ -801,20 +796,14 @@ class DebianLicensing:
 
                 # TODO: Add unknown matches if matches are weak
                 matches.extend(text_matches)
+            elif text_matches:
+                matches.extend(text_matches)
             else:
-                # TODO: Add unknown matches if matches are weak
-                if text_matches:
-                    matches.extend(text_matches)
-                else:
-                    matches.extend(add_unknown_matches(name=name, text=text))
+                matches.extend(add_unknown_matches(name=name, text=text))
 
             if license_paragraph.comment:
                 comment = license_paragraph.comment.text
-                comment_matches = get_license_matches(query_string=comment)
-
-                # If license detected in the comments are not consistent with the license
-                # detected in text, add the license matches detected in the comment to be reported
-                if comment_matches:
+                if comment_matches := get_license_matches(query_string=comment):
                     if not have_consistent_licenses(
                         matches=text_matches, reference_matches=comment_matches
                     ):
@@ -870,19 +859,12 @@ class DebianLicensing:
         2. is a common debian license key. (One of common_licenses)
         Otherwise, return False.
         """
-        all_keys = []
-        all_keys.extend(list(self.license_matches_by_symbol.keys()))
+        all_keys = list(list(self.license_matches_by_symbol.keys()))
         all_keys.extend(list(common_licenses.keys()))
 
         expression_keys = self.licensing.license_keys(debian_expression)
 
-        for key in expression_keys:
-            if key in all_keys:
-                continue
-
-            return False
-
-        return True
+        return all(key in all_keys for key in expression_keys)
 
 
 @attr.s
@@ -924,9 +906,7 @@ class EnhancedDebianCopyright:
             return
 
         if len(header_paras) != 1:
-            raise Exception(
-                f'Multiple Header paragraphs in copyright file', *header_paras
-            )
+            raise Exception('Multiple Header paragraphs in copyright file', *header_paras)
 
         return header_paras[0]
 
@@ -988,32 +968,27 @@ class EnhancedDebianCopyright:
 
     @property
     def is_all_licenses_used(self):
-        # FIXME: If `lgpl` isn't used but there is `lgpl+` somwhere this
-        # wouldn't detect correctly. Could be parsed, normalized and the
-        # individual components could be matched exactly.
+        expressions_with_text = [
+            paragraph.license.name
+            for paragraph in self.license_paragraphs
+            if paragraph.license.name
+        ]
 
-        expressions_with_text = []
-        expressions_without_text = []
-
-        for paragraph in self.license_paragraphs:
-            if paragraph.license.name:
-                expressions_with_text.append(paragraph.license.name)
-
-        for paragraph in self.file_paragraphs:
-            if paragraph.license.name and not paragraph.license.text:
-                expressions_without_text.append(paragraph.license.name)
+        expressions_without_text = [
+            paragraph.license.name
+            for paragraph in self.file_paragraphs
+            if paragraph.license.name and not paragraph.license.text
+        ]
 
         header_paragraph = self.header_paragraph
         if header_paragraph.license.name and not header_paragraph.license.text:
             expressions_without_text.append(header_paragraph.license.name)
 
         for expression_with_text in expressions_with_text:
-            expression_used = False
-
-            for expression_without_text in expressions_without_text:
-
-                if expression_with_text in expression_without_text:
-                    expression_used = True
+            expression_used = any(
+                expression_with_text in expression_without_text
+                for expression_without_text in expressions_without_text
+            )
 
             if not expression_used:
                 return False
@@ -1038,16 +1013,19 @@ class EnhancedDebianCopyright:
 
     def get_all_license_expressions(self):
 
-        license_expressions = []
-
-        for paragraph in self.debian_copyright.paragraphs:
+        return [
+            paragraph.license.name
+            for paragraph in self.debian_copyright.paragraphs
             if isinstance(
                 paragraph,
-                (CopyrightHeaderParagraph, CopyrightLicenseParagraph, CopyrightLicenseParagraph)
-            ) and paragraph.license.name:
-                license_expressions.append(paragraph.license.name)
-
-        return license_expressions
+                (
+                    CopyrightHeaderParagraph,
+                    CopyrightLicenseParagraph,
+                    CopyrightLicenseParagraph,
+                ),
+            )
+            and paragraph.license.name
+        ]
 
     def get_consistentcy_errors(self):
 
@@ -1100,11 +1078,13 @@ def copyright_detector(location):
     if location:
         from cluecode.copyrights import detect_copyrights
 
-        copyrights = []
+        copyrights = [
+            value
+            for dtype, value, _start, _end in detect_copyrights(location)
+            if dtype == 'copyrights'
+        ]
 
-        for dtype, value, _start, _end in detect_copyrights(location):
-            if dtype == 'copyrights':
-                copyrights.append(value)
+
         return copyrights
 
 
@@ -1158,8 +1138,7 @@ def clean_debian_comma_logic(exp):
         subexps.insert(0, right)
     subexps.insert(0, exp)
     wrapped = [f'({i.strip()})' for i in subexps]
-    cleaned = ' and '.join(wrapped)
-    return cleaned
+    return ' and '.join(wrapped)
 
 
 def clean_expression(text):
@@ -1265,12 +1244,13 @@ def is_known_license_intro(license_match):
     """
     from licensedcode.match_aho import MATCH_AHO_EXACT
 
-    if license_match.rule.is_license_intro and (
-        license_match.matcher == MATCH_AHO_EXACT or license_match.coverage() == 100
-    ):
-        return True
-
-    return False
+    return bool(
+        license_match.rule.is_license_intro
+        and (
+            license_match.matcher == MATCH_AHO_EXACT
+            or license_match.coverage() == 100
+        )
+    )
 
 
 def add_unknown_matches(name, text):
@@ -1293,7 +1273,7 @@ def add_unknown_matches(name, text):
     matched_tokens = query_run.tokens
 
     qspan = Span(range(match_start, query_run.end + 1))
-    ispan = Span(range(0, match_len))
+    ispan = Span(range(match_len))
     len_legalese = idx.len_legalese
     hispan = Span(p for p, t in enumerate(matched_tokens) if t < len_legalese)
 
@@ -1329,7 +1309,7 @@ class UnknownRule(Rule):
     """
 
     def __attrs_post_init__(self, *args, **kwargs):
-        self.identifier = 'debian-' + self.license_expression
+        self.identifier = f'debian-{self.license_expression}'
         expression = self.licensing.parse(self.license_expression)
 
         self.license_expression = expression.render()
@@ -1349,30 +1329,27 @@ class UnknownRule(Rule):
 def get_license_detections_from_extra_data(paragraph):
     license_detections = []
     if paragraph.comment:
-        license_detection = get_license_detection_from_extra_data(
+        if license_detection := get_license_detection_from_extra_data(
             query_string=paragraph.comment.text,
             paragraph=paragraph,
-        )
-        if license_detection:
+        ):
             license_detections.append(license_detection)
 
     if paragraph.extra_data:
         for _field_name, field_value in paragraph.extra_data.items():
-            license_detection = get_license_detection_from_extra_data(
+            if license_detection := get_license_detection_from_extra_data(
                 query_string=field_value,
                 paragraph=paragraph,
-            )
-            if license_detection:
+            ):
                 license_detections.append(license_detection)
 
     return license_detections
 
 
 def get_license_detection_from_extra_data(query_string, paragraph):
-    matches = remove_known_license_intros(
+    if matches := remove_known_license_intros(
         get_license_matches(query_string=query_string)
-    )
-    if matches:
+    ):
         normalized_expression = get_license_expression_from_matches(
             license_matches=matches
         )
@@ -1393,15 +1370,9 @@ def get_license_detection_from_nameless_paragraph(paragraph):
 
     if not matches:
         matches = add_unknown_matches(name=None, text=paragraph.license.text)
-        normalized_expression = get_license_expression_from_matches(
-            license_matches=matches
-        )
-    else:
-        # TODO: Add unknown matches if matches are weak
-        normalized_expression = get_license_expression_from_matches(
-            license_matches=matches
-        )
-
+    normalized_expression = get_license_expression_from_matches(
+        license_matches=matches
+    )
     return LicenseDetection(
         paragraph=paragraph,
         license_expression_object=normalized_expression,
@@ -1415,13 +1386,13 @@ def have_consistent_licenses(matches, reference_matches):
     same license as all the licenses of the reference_matches list of
     LicenseMatch.
     """
-    for reference_match in reference_matches:
-        if not have_consistent_licenses_with_match(
+    return all(
+        have_consistent_licenses_with_match(
             matches=matches,
             reference_match=reference_match,
-        ):
-            return False
-    return True
+        )
+        for reference_match in reference_matches
+    )
 
 
 def have_consistent_licenses_with_match(matches, reference_match):
@@ -1429,10 +1400,7 @@ def have_consistent_licenses_with_match(matches, reference_match):
     Return true if all the license of the matches list of LicenseMatch have the
     same license as the reference_match LicenseMatch.
     """
-    for match in matches:
-        if not reference_match.same_licensing(match):
-            return False
-    return True
+    return all(reference_match.same_licensing(match) for match in matches)
 
 
 def is_paragraph_debian_packaging(paragraph):

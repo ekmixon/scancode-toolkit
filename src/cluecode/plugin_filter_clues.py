@@ -66,8 +66,7 @@ class RedundantCluesFilter(PostScanPlugin):
         rules_by_id = {r.identifier: r for r in get_index().rules_by_rid}
 
         for resource in codebase.walk():
-            filtered = filter_ignorable_resource_clues(resource, rules_by_id)
-            if filtered:
+            if filtered := filter_ignorable_resource_clues(resource, rules_by_id):
                 filtered.save(codebase)
 
 
@@ -79,8 +78,7 @@ def filter_ignorable_resource_clues(resource, rules_by_id):
     place if it was modified.
     """
     detections = Detections.from_resource(resource)
-    filtered = filter_ignorable_clues(detections, rules_by_id)
-    if filtered:
+    if filtered := filter_ignorable_clues(detections, rules_by_id):
         if hasattr(resource, 'emails'):
             resource.emails = filtered.emails
         if hasattr(resource, 'urls'):
@@ -355,24 +353,21 @@ def collect_ignorables(license_matches, rules_by_id):
 
         lines_range = frozenset(range(lic['start_line'], lic['end_line'] + 1))
 
-        ign_copyrights = frozenset(rule.ignorable_copyrights or [])
-        if ign_copyrights:
+        if ign_copyrights := frozenset(rule.ignorable_copyrights or []):
             copyrights.add(Ignorable(lines_range=lines_range, value=ign_copyrights))
 
-        ign_holders = frozenset(rule.ignorable_holders or [])
-        if ign_holders:
+        if ign_holders := frozenset(rule.ignorable_holders or []):
             holders.add(Ignorable(lines_range=lines_range, value=ign_holders))
 
-        ign_authors = frozenset(rule.ignorable_authors or [])
-        if ign_authors:
+        if ign_authors := frozenset(rule.ignorable_authors or []):
             authors.add(Ignorable(lines_range=lines_range, value=ign_authors))
 
-        ign_emails = frozenset(rule.ignorable_emails or [])
-        if ign_emails:
+        if ign_emails := frozenset(rule.ignorable_emails or []):
             emails.add(Ignorable(lines_range=lines_range, value=ign_emails))
 
-        ign_urls = frozenset(r.rstrip('/') for r in (rule.ignorable_urls or []))
-        if ign_urls:
+        if ign_urls := frozenset(
+            r.rstrip('/') for r in (rule.ignorable_urls or [])
+        ):
             urls.add(Ignorable(lines_range=lines_range, value=ign_urls))
 
         if TRACE:

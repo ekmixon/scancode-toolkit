@@ -72,19 +72,21 @@ class IsLicenseText(PostScanPlugin):
             if not resource.is_text:
                 continue
             # keep unique texts/line ranges since we repeat this for each matched licenses
-            license_texts = set()
-            for lic in resource.licenses:
-                license_texts.add(
-                    (lic.get('matched_text'), 
-                     lic.get('start_line', 0), 
-                     lic.get('end_line',0),
-                     lic.get('matched_rule', {}).get('match_coverage', 0))
+            license_texts = {
+                (
+                    lic.get('matched_text'),
+                    lic.get('start_line', 0),
+                    lic.get('end_line', 0),
+                    lic.get('matched_rule', {}).get('match_coverage', 0),
                 )
-                
+                for lic in resource.licenses
+            }
+
             # use coverage to weight and estimate of the the actual matched length
-            license_texts_size = 0
-            for txt, _, _, cov in license_texts:
-                license_texts_size += len(txt) * (cov / 100)
+            license_texts_size = sum(
+                len(txt) * (cov / 100) for txt, _, _, cov in license_texts
+            )
+
             if TRACE:
                 logger_debug(
                     'IsLicenseText: license size:', license_texts_size,

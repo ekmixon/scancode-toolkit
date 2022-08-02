@@ -88,13 +88,12 @@ def build_copyright_paragraphs(codebase, **kwargs):
     """
 
     codebase.add_files_count_to_current_header()
-    header_para = CopyrightHeaderParagraph(
+    yield CopyrightHeaderParagraph(
         format='https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/',
         # TODO: add some details, but not all these
         # comment=saneyaml.dump(codebase.get_headers()),
         comment=notice,
     )
-    yield header_para
 
     # TODO: create CopyrightLicenseParagraph for common licenses
     # TODO: group files that share copyright and license
@@ -108,13 +107,13 @@ def build_copyright_paragraphs(codebase, **kwargs):
         dlicense = build_license(scanned_file)
         dcopyright = build_copyright_field(scanned_file)
 
-        file_para = CopyrightFilesParagraph.from_dict(dict(
-            files=dfiles,
-            license=dlicense,
-            copyright=dcopyright,
-        ))
-
-        yield file_para
+        yield CopyrightFilesParagraph.from_dict(
+            dict(
+                files=dfiles,
+                license=dlicense,
+                copyright=dcopyright,
+            )
+        )
 
 
 def build_copyright_field(scanned_file):
@@ -173,11 +172,12 @@ def combine_expressions(expressions, relation='AND', licensing=Licensing()):
 
     if not isinstance(expressions, (list, tuple)):
         raise TypeError(
-            'expressions should be a list or tuple and not: {}'.format(
-                type(expressions)))
+            f'expressions should be a list or tuple and not: {type(expressions)}'
+        )
+
 
     # Remove duplicate element in the expressions list
-    expressions = list(dict((x, True) for x in expressions).keys())
+    expressions = list({x: True for x in expressions}.keys())
 
     if len(expressions) == 1:
         return expressions[0]

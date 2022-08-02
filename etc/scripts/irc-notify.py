@@ -92,14 +92,12 @@ def appveyor_vars():
     build_url = '{appveyor_url}/project/{account_name}/{project_name}/build/{build_version}'.format(**locals())
     commit_url = 'https://{repo_provider}.com/{repo_name}/commit/{commit}'.format(**locals())
 
-    vars = dict(
+    return dict(
         appveyor_url=appveyor_url,
         account_name=account_name,
         project_name=project_name,
         build_version=build_version,
-
         build_url=build_url,
-
         repo_provider=repo_provider,
         repo_name=repo_name,
         branch=branch,
@@ -110,16 +108,12 @@ def appveyor_vars():
         short_commit=short_commit,
         message=message,
         message_extended=message_extended,
-
         pull_request_title=pull_request_title,
         pull_request_number=pull_request_number,
-
         commit_url=commit_url,
-
         color_green='\x033',
         color_red='\x034',
     )
-    return vars
 
 
 def notify():
@@ -149,17 +143,17 @@ def notify():
         response = line.split()
 
         if response[0] == 'PING':
-            irc_file.send('PONG {}\r\n'.format(reponse[1]).encode())
+            irc_file.send(f'PONG {reponse[1]}\r\n'.encode())
 
         elif response[1] == '433':
-            irc_sock.send('NICK {}\r\n'.format(irc_nick).encode())
+            irc_sock.send(f'NICK {irc_nick}\r\n'.encode())
 
         elif response[1] == '001':
             time.sleep(5)
             # send notification
             for msg in messages:
-                print('NOTICE #{} :{}'.format(channel, msg))
-                irc_sock.send('NOTICE #{} :{}\r\n'.format(channel, msg).encode())
+                print(f'NOTICE #{channel} :{msg}')
+                irc_sock.send(f'NOTICE #{channel} :{msg}\r\n'.encode())
             time.sleep(5)
             sys.exit()
 

@@ -57,9 +57,7 @@ class Testcompatibility_tags(object):
         get_config_var = sysconfig.get_config_var
 
         def _mock_get_config_var(var):
-            if var in kwd:
-                return kwd[var]
-            return get_config_var(var)
+            return kwd[var] if var in kwd else get_config_var(var)
 
         return _mock_get_config_var
 

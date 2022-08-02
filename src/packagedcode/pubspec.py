@@ -109,9 +109,7 @@ def compute_normalized_license(declared_license, location=None):
     if not declared_license:
         return
 
-    detected_licenses = []
-
-    if detected_licenses:
+    if detected_licenses := []:
         return combine_expressions(detected_licenses)
 
 
@@ -179,14 +177,13 @@ def collect_locks(locks_data):
     # FIXME: we treat all as nno optioanl for now
     sdks = locks_data.get('sdks') or {}
     for name, version in sdks.items():
-        dep = build_dep(
+        yield build_dep(
             name,
             version,
             scope='sdk',
             is_runtime=True,
             is_optional=False,
         )
-        yield dep
 
     packages = locks_data.get('packages') or {}
     for name, details in packages.items():
@@ -197,20 +194,13 @@ def collect_locks(locks_data):
         # they do not map exactly to the pubspec scopes since transitive can be
         # either main or dev
         scope = details.get('dependency')
-        if scope == 'direct dev':
-            is_runtime = False
-        else:
-            is_runtime = True
-
+        is_runtime = scope != 'direct dev'
         desc = details.get('description') or {}
         known_desc = isinstance(desc, dict)
 
         # issue a warning for unknown data structure
         warn = False
-        if not known_desc:
-            if not (isinstance(desc, str) and desc == 'flutter'):
-                warn = True
-        else:
+        if known_desc:
             dname = desc.get('name')
             durl = desc.get('url')
             dsource = details.get('source')
@@ -222,6 +212,8 @@ def collect_locks(locks_data):
             ):
                 warn = True
 
+        elif not isinstance(desc, str) or desc != 'flutter':
+            warn = True
         if warn:
             warnings.warn(
                 f'Dart pubspec.locks with unsupported external repo '
@@ -229,14 +221,13 @@ def collect_locks(locks_data):
                 stacklevel=1,
             )
 
-        dep = build_dep(
+        yield build_dep(
             name,
             version,
             scope=scope,
             is_runtime=is_runtime,
             is_optional=False,
         )
-        yield dep
 
 
 def collect_deps(data, dependency_field_name, is_runtime=True, is_optional=False):
@@ -257,14 +248,13 @@ def collect_deps(data, dependency_field_name, is_runtime=True, is_optional=False
     # https://dart.dev/tools/pub/dependencies#dependency-sources
     dependencies = data.get(dependency_field_name) or {}
     for name, version in dependencies.items():
-        dep = build_dep(
+        yield build_dep(
             name,
             version,
             scope=dependency_field_name,
             is_runtime=is_runtime,
             is_optional=is_optional,
         )
-        yield dep
 
 
 def build_dep(name, version, scope, is_runtime=True, is_optional=False):
@@ -288,7 +278,7 @@ def build_dep(name, version, scope, is_runtime=True, is_optional=False):
         purl = PackageURL(type='pubspec', name=name)
         is_resolved = False
 
-    dep = models.DependentPackage(
+    return models.DependentPackage(
         purl=purl.to_string(),
         requirement=version,
         scope=scope,
@@ -296,7 +286,6 @@ def build_dep(name, version, scope, is_runtime=True, is_optional=False):
         is_optional=is_optional,
         is_resolved=is_resolved,
     )
-    return dep
 
 
 def build_package(pubspec_data):

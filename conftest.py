@@ -44,8 +44,15 @@ VALIDATION_TEST = 'scanvalidate'
 
 
 def pytest_configure(config):
-    config.addinivalue_line('markers', SLOW_TEST + ': Mark a ScanCode test as a slow, long running test.')
-    config.addinivalue_line('markers', VALIDATION_TEST + ': Mark a ScanCode test as a validation test, super slow, long running test.')
+    config.addinivalue_line(
+        'markers',
+        f'{SLOW_TEST}: Mark a ScanCode test as a slow, long running test.',
+    )
+
+    config.addinivalue_line(
+        'markers',
+        f'{VALIDATION_TEST}: Mark a ScanCode test as a validation test, super slow, long running test.',
+    )
 
 
 TEST_SUITES = 'standard', 'all', 'validate'
@@ -128,7 +135,7 @@ def pytest_collection_modifyitems(config, items):
         base_branch = base_branch or get_git_branch()
         impacted_modules = get_impacted_modules(base_branch) or set()
         all_is_changed = not(impacted_modules)
-        impacted_modules_paths = ['/{}/'.format(m) for m in impacted_modules]
+        impacted_modules_paths = [f'/{m}/' for m in impacted_modules]
         print()
         if not impacted_modules:
             print('All modules impacted')
@@ -147,15 +154,21 @@ def pytest_collection_modifyitems(config, items):
             tests_to_skip.append(item)
             continue
 
-        if changed_only and not all_is_changed:
-            if not is_changed(item.fspath, impacted_modules_paths):
-                tests_to_skip.append(item)
-                continue
+        if (
+            changed_only
+            and not all_is_changed
+            and not is_changed(item.fspath, impacted_modules_paths)
+        ):
+            tests_to_skip.append(item)
+            continue
 
         tests_to_run.append(item)
 
     print()
-    print('{} tests selected, {} tests skipped.'.format(len(tests_to_run), len(tests_to_skip)))
+    print(
+        f'{len(tests_to_run)} tests selected, {len(tests_to_skip)} tests skipped.'
+    )
+
 
     if dry_run:
         if config.getvalue('verbose'):
@@ -205,7 +218,7 @@ def get_all_modules():
     """
     Return a set of top level modules.
     """
-    all_modules = set([p for p in os.listdir('src') if p.endswith('code')])
+    all_modules = {p for p in os.listdir('src') if p.endswith('code')}
     if TRACE:
         print()
         print('get_all_modules:', all_modules)
@@ -281,7 +294,7 @@ def get_changed_files(base_branch='develop'):
     # this may fail with exceptions
     cmd = 'git', 'diff', '--name-only',
     if base_branch:
-        cmd += base_branch + '...',
+        cmd += (f'{base_branch}...', )
     changed_files = check_output(cmd, stderr=STDOUT)
     changed_files = changed_files.replace('\\', '/')
     changed_files = changed_files.splitlines(False)

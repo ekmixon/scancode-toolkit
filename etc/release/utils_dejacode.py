@@ -26,17 +26,16 @@ DEJACODE_API_URL = os.environ.get('DEJACODE_API_URL', '')
 
 DEJACODE_API_URL_PACKAGES = f'{DEJACODE_API_URL}packages/'
 DEJACODE_API_HEADERS = {
-    'Authorization': 'Token {}'.format(DEJACODE_API_KEY),
+    'Authorization': f'Token {DEJACODE_API_KEY}',
     'Accept': 'application/json; indent=4',
 }
 
 
 def can_do_api_calls():
-    if not DEJACODE_API_KEY and DEJACODE_API_URL:
-        print('DejaCode DEJACODE_API_KEY and DEJACODE_API_URL not configured. Doing nothing')
-        return False
-    else:
+    if DEJACODE_API_KEY or not DEJACODE_API_URL:
         return True
+    print('DejaCode DEJACODE_API_KEY and DEJACODE_API_URL not configured. Doing nothing')
+    return False
 
 
 def fetch_dejacode_packages(params):
@@ -78,8 +77,7 @@ def update_with_dejacode_data(distribution):
     Update the Distribution `distribution` with DejaCode package data. Return
     True if data was updated.
     """
-    package_data = get_package_data(distribution)
-    if package_data:
+    if package_data := get_package_data(distribution):
         return distribution.update(package_data, keep_extra=False)
 
     print(f'No package found for: {distribution}')
@@ -90,8 +88,7 @@ def update_with_dejacode_about_data(distribution):
     Update the Distribution `distribution` wiht ABOUT code data fetched from
     DejaCode. Return True if data was updated.
     """
-    package_data = get_package_data(distribution)
-    if package_data:
+    if package_data := get_package_data(distribution):
         package_api_url = package_data['api_url']
         about_url = f'{package_api_url}about'
         response = requests.get(about_url, headers=DEJACODE_API_HEADERS)
@@ -110,8 +107,7 @@ def fetch_and_save_about_files(distribution, dest_dir='thirdparty'):
     from DejaCode for a Distribution `distribution`. Return True if files were
     fetched.
     """
-    package_data = get_package_data(distribution)
-    if package_data:
+    if package_data := get_package_data(distribution):
         package_api_url = package_data['api_url']
         about_url = f'{package_api_url}about_files'
         response = requests.get(about_url, headers=DEJACODE_API_HEADERS)
@@ -168,8 +164,7 @@ def create_dejacode_package(distribution):
     if not can_do_api_calls():
         return
 
-    existing_package_data = get_package_data(distribution)
-    if existing_package_data:
+    if existing_package_data := get_package_data(distribution):
         return existing_package_data
 
     print(f'Creating new DejaCode package for: {distribution}')
@@ -196,8 +191,7 @@ def create_dejacode_package(distribution):
     ]
 
     for field in fields_to_carry_over:
-        value = getattr(distribution, field, None)
-        if value:
+        if value := getattr(distribution, field, None):
             new_package_payload[field] = value
 
     response = requests.post(

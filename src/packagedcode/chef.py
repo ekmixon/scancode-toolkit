@@ -227,17 +227,16 @@ def build_package(package_data):
     bug_tracking_url = package_data.get('issues_url', '')
 
     dependencies = package_data.get('dependencies', {}) or package_data.get('depends', {})
-    package_dependencies = []
-    for dependency_name, requirement in dependencies.items():
-        package_dependencies.append(
-            models.DependentPackage(
-                purl=PackageURL(type='chef', name=dependency_name).to_string(),
-                scope='dependencies',
-                requirement=requirement,
-                is_runtime=True,
-                is_optional=False,
-            )
+    package_dependencies = [
+        models.DependentPackage(
+            purl=PackageURL(type='chef', name=dependency_name).to_string(),
+            scope='dependencies',
+            requirement=requirement,
+            is_runtime=True,
+            is_optional=False,
         )
+        for dependency_name, requirement in dependencies.items()
+    ]
 
     return ChefPackage(
         name=name,

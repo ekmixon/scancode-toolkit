@@ -63,8 +63,7 @@ class PHPComposerPackage(models.Package):
 
     @classmethod
     def recognize(cls, location):
-        for package in parse(location):
-            yield package
+        yield from parse(location)
 
     @classmethod
     def get_package_root(cls, manifest_resource, codebase):
@@ -72,15 +71,15 @@ class PHPComposerPackage(models.Package):
 
     def repository_homepage_url(self, baseurl=default_web_baseurl):
         if self.namespace:
-            return '{}/packages/{}/{}'.format(baseurl, self.namespace, self.name)
+            return f'{baseurl}/packages/{self.namespace}/{self.name}'
         else:
-            return '{}/packages/{}'.format(baseurl, self.name)
+            return f'{baseurl}/packages/{self.name}'
 
     def api_data_url(self, baseurl=default_api_baseurl):
         if self.namespace:
-            return '{}/packages/{}/{}.json'.format(baseurl, self.namespace, self.name)
+            return f'{baseurl}/packages/{self.namespace}/{self.name}.json'
         else:
-            return '{}/packages/{}.json'.format(baseurl, self.name)
+            return f'{baseurl}/packages/{self.name}.json'
 
     def compute_normalized_license(self):
         """
@@ -102,12 +101,15 @@ def compute_normalized_license(declared_license):
     if isinstance(declared_license, str):
         if declared_license == 'proprietary':
             return declared_license
-        if '(' in declared_license and ')' in declared_license and ' or ' in declared_license:
-            declared_license = declared_license.strip().rstrip(')').lstrip('(')
-            declared_license = declared_license.split(' or ')
-        else:
+        if (
+            '(' not in declared_license
+            or ')' not in declared_license
+            or ' or ' not in declared_license
+        ):
             return models.compute_normalized_license(declared_license)
 
+        declared_license = declared_license.strip().rstrip(')').lstrip('(')
+        declared_license = declared_license.split(' or ')
     if isinstance(declared_license, list):
         for declared in declared_license:
             detected_license = models.compute_normalized_license(declared)
@@ -143,8 +145,7 @@ def parse(location):
     elif is_phpcomposer_lock(location):
         with io.open(location, encoding='utf-8') as loc:
             package_data = json.load(loc)
-        for package in build_packages_from_lock(package_data):
-            yield package
+        yield from build_packages_from_lock(package_data)
 
 
 def build_package_from_json(package_data):
@@ -184,8 +185,7 @@ def build_package_from_json(package_data):
     for source, target in plain_fields:
         value = package_data.get(source)
         if isinstance(value, str):
-            value = value.strip()
-            if value:
+            if value := value.strip():
                 setattr(package, target, value)
 
     # mapping of top level composer.json items to a function accepting as
@@ -208,11 +208,10 @@ def build_package_from_json(package_data):
     for source, func in field_mappers:
         logger.debug('parse: %(source)r, %(func)r' % locals())
         value = package_data.get(source)
+        if value and isinstance(value, str):
+            value = value.strip()
         if value:
-            if isinstance(value, str):
-                value = value.strip()
-            if value:
-                func(value, package)
+            func(value, package)
     # Parse vendor from name value
     vendor_mapper(package)
     return package
@@ -346,21 +345,20 @@ def parse_person(persons):
 
     Both forms are equivalent.
     """
-    if isinstance(persons, list):
-        for person in persons:
-            # ensure we have our three values
-            name = person.get('name')
-            role = person.get('role')
-            email = person.get('email')
-            url = person.get('homepage')
-            # FIXME: this got cargoculted from npm package.json parsing
-            yield (
-                name and name.strip(),
-                role and role.strip(),
-                email and email.strip('<> '),
-                url and url.strip('() '))
-    else:
+    if not isinstance(persons, list):
         raise ValueError('Incorrect PHP composer persons: %(persons)r' % locals())
+    for person in persons:
+        # ensure we have our three values
+        name = person.get('name')
+        role = person.get('role')
+        email = person.get('email')
+        url = person.get('homepage')
+        # FIXME: this got cargoculted from npm package.json parsing
+        yield (
+            name and name.strip(),
+            role and role.strip(),
+            email and email.strip('<> '),
+            url and url.strip('() '))
 
 
 def build_dep_package(package, scope, is_runtime, is_optional):
@@ -383,5 +381,4 @@ def build_packages_from_lock(package_data):
     required_deps = [build_dep_package(p, scope='require', is_runtime=True, is_optional=False) for p in packages]
     required_dev_deps = [build_dep_package(p, scope='require-dev', is_runtime=False, is_optional=True) for p in packages_dev]
     yield PHPComposerPackage(dependencies=required_deps + required_dev_deps)
-    for package in packages + packages_dev:
-        yield package
+    yield from packages + packages_dev

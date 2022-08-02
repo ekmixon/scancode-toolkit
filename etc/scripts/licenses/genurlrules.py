@@ -28,12 +28,10 @@ def fetch_text(url):
     """
     Fetch and return a temp file from the content at `url`.
     """
-    if 'raw' in url:
+    if 'raw' in url or 'github.com' not in url or '/blob/' not in url:
         fetchable = url
-    elif 'github.com' in url and '/blob/' in url:
-        fetchable = url.replace('/blob/', '/raw/')
     else:
-        fetchable = url
+        fetchable = url.replace('/blob/', '/raw/')
     print('  Fetching:', fetchable)
     return fetch.download_url(fetchable, timeout=120)
 
@@ -42,8 +40,7 @@ def get_license_expression(location):
     """
     Return the matched license expression for a file at location.
     """
-    matches = get_license_matches(location=location)
-    if matches:
+    if matches := get_license_matches(location=location):
         expressions = [m.rule.license_expression for m in matches]
         return combine_expressions(expressions)
     else:
@@ -91,11 +88,12 @@ def combine_expressions(expressions, relation='AND', licensing=Licensing()):
 
     if not isinstance(expressions, (list, tuple)):
         raise TypeError(
-            'expressions should be a list or tuple and not: {}'.format(
-                type(expressions)))
+            f'expressions should be a list or tuple and not: {type(expressions)}'
+        )
+
 
     # Remove duplicate element in the expressions list
-    expressions = dict((x, True) for x in expressions).keys()
+    expressions = {x: True for x in expressions}.keys()
 
     if len(expressions) == 1:
         return expressions[0]
@@ -123,7 +121,7 @@ def find_rule_base_loc(license_expression):
     while True:
         base_name = template.format(idx)
         base_loc = os.path.join(rules_data_dir, base_name)
-        if not os.path.exists(base_loc + '.RULE'):
+        if not os.path.exists(f'{base_loc}.RULE'):
             return base_loc
         idx += 1
 
@@ -149,7 +147,7 @@ def gen_rules(urls):
                 continue
             else:
                 seen.add(url)
- 
+
             has_exp = False
             print('Processing:', i, repr(url))
             if '|' in url:
@@ -157,8 +155,7 @@ def gen_rules(urls):
             if not url:
                 continue
 
-            existing = get_existing_rule(url)
-            if existing:
+            if existing := get_existing_rule(url):
                 print('  Rule already exists, skipping')
                 continue
 
@@ -172,8 +169,8 @@ def gen_rules(urls):
                     continue
 
             base_loc = find_rule_base_loc(license_expression)
-            data_file = base_loc + '.yml'
-            text_file = base_loc + '.RULE'
+            data_file = f'{base_loc}.yml'
+            text_file = f'{base_loc}.RULE'
             with open(text_file, 'w') as o:
                 o.write(url)
 

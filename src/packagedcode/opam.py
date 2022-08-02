@@ -51,11 +51,11 @@ class OpamPackage(models.Package):
 
     def repository_homepage_url(self, baseurl=default_web_baseurl):
         if self.name:
-            return '{}/{}'.format(baseurl, self.name)
+            return f'{baseurl}/{self.name}'
 
     def api_data_url(self, baseurl=default_api_baseurl):
         if self.name and self.version:
-            return '{}/{}/{}.{}/opam'.format(baseurl, self.name, self.name, self.version)
+            return f'{baseurl}/{self.name}/{self.name}.{self.version}/opam'
 
 
 def is_opam(location):
@@ -77,19 +77,18 @@ def build_opam_package(opams):
     """
     Return a Package from a opam file or None.
     """
-    package_dependencies = []
     deps = opams.get('depends') or []
-    for dep in deps:
-        package_dependencies.append(
-            models.DependentPackage(
-                purl=dep.purl,
-                requirement=dep.version,
-                scope='dependency',
-                is_runtime=True,
-                is_optional=False,
-                is_resolved=False,
-            )
+    package_dependencies = [
+        models.DependentPackage(
+            purl=dep.purl,
+            requirement=dep.version,
+            scope='dependency',
+            is_runtime=True,
+            is_optional=False,
+            is_resolved=False,
         )
+        for dep in deps
+    ]
 
     name = opams.get('name')
     version = opams.get('version')
@@ -110,27 +109,21 @@ def build_opam_package(opams):
     descriptions = [d for d in (short_desc, long_desc) if d and d.strip()]
     description = '\n'.join(descriptions)
 
-    parties = []
     authors = opams.get('authors') or []
-    for author in authors:
-        parties.append(
-            models.Party(
-                type=models.party_person,
-                name=author,
-                role='author'
-            )
-        )
-    maintainers = opams.get('maintainer') or []
-    for maintainer in maintainers:
-        parties.append(
-            models.Party(
-                type=models.party_person,
-                email=maintainer,
-                role='maintainer'
-            )
-        )
+    parties = [
+        models.Party(type=models.party_person, name=author, role='author')
+        for author in authors
+    ]
 
-    package = OpamPackage(
+    maintainers = opams.get('maintainer') or []
+    parties.extend(
+        models.Party(
+            type=models.party_person, email=maintainer, role='maintainer'
+        )
+        for maintainer in maintainers
+    )
+
+    return OpamPackage(
         name=name,
         version=version,
         vcs_url=vcs_url,
@@ -144,10 +137,8 @@ def build_opam_package(opams):
         declared_license=declared_license,
         description=description,
         parties=parties,
-        dependencies=package_dependencies
+        dependencies=package_dependencies,
     )
-
-    return package
 
 """
 Example:- 
@@ -256,14 +247,13 @@ def parse_opam(location):
     opam_data = {}
 
     for i, line in enumerate(lines):
-        parsed_line = parse_file_line(line)
-        if parsed_line:
+        if parsed_line := parse_file_line(line):
             key = parsed_line.group('key').strip()
             value = parsed_line.group('value').strip()
             if key == 'description': # Get multiline description
                 value = ''
                 for cont in lines[i+1:]:
-                    value += ' ' + cont.strip()
+                    value += f' {cont.strip()}'
                     if '"""' in cont:
                         break
 
@@ -276,12 +266,12 @@ def parse_opam(location):
             elif key == 'authors':
                 if '[' in line: # If authors are present in multiple lines
                     for authors in lines[i+1:]:
-                        value += ' ' + authors.strip()
+                        value += f' {authors.strip()}'
                         if ']' in authors:
                             break
                     value = value.strip('["] ')
                 else:
-                    value = clean_data(value)   
+                    value = clean_data(value)
                 value = value.split('" "')
                 opam_data[key] = value
             elif key == 'depends': # Get multiline dependencies
@@ -289,8 +279,7 @@ def parse_opam(location):
                 for dep in lines[i+1:]:
                     if ']' in dep:
                         break
-                    parsed_dep = parse_dep(dep)
-                    if parsed_dep:
+                    if parsed_dep := parse_dep(dep):
                         value.append(Opam(
                                 name=parsed_dep.group('name').strip(),
                                 version=parsed_dep.group('version').strip('{ } ').replace('"', '')
@@ -313,8 +302,7 @@ def parse_opam(location):
                         opam_data[key] = value
                 else:
                     value = value.strip('" ')
-                    parsed_checksum = parse_checksum(value)
-                    if parsed_checksum:
+                    if parsed_checksum := parse_checksum(value):
                         key = clean_data(parsed_checksum.group('key').strip())
                         value = clean_data(parsed_checksum.group('value').strip())
                         opam_data[key] = value

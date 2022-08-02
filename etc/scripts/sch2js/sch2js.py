@@ -73,10 +73,12 @@ if __name__ == '__main__':
         """
         Return a mapping for the schema of a single field.
         """
-        field_schema = {}
+        field_schema = {
+            'type': SCHEMATIC_TYPE_TO_JSON_TYPE.get(
+                field_instance.__class__.__name__, 'string'
+            )
+        }
 
-        field_schema['type'] = SCHEMATIC_TYPE_TO_JSON_TYPE.get(
-            field_instance.__class__.__name__, 'string')
 
         if hasattr(field_instance, 'metadata'):
             field_schema['title'] = field_instance.metadata.get('label', '')
@@ -106,22 +108,19 @@ if __name__ == '__main__':
                 try:
                     node = jsonschema_for_model(field_instance.model_class, 'array')
                     if hasattr(field_instance, 'metadata'):
-                        _node = {}
-                        _node['type'] = node.pop('type')
+                        _node = {'type': node.pop('type')}
                         _node['title'] = field_instance.metadata.get('label', '')
                         _node['description'] = field_instance.metadata.get('description', '')
-                        _node.update(node)
+                        _node |= node
                         node = _node
                 except AttributeError:
                     field_schema = jsonschema_for_single_field(field_instance.field)
-                    node = {}
-                    node['type'] = 'array'
+                    node = {'type': 'array'}
                     if hasattr(field_instance, 'metadata'):
                         node['title'] = field_instance.metadata.get('label', '')
                         node['description'] = field_instance.metadata.get('description', '')
                     node['items'] = field_schema
 
-            # Convert field as single model
             elif isinstance(field_instance, BaseType):
                 node = jsonschema_for_single_field(field_instance)
 
@@ -186,5 +185,5 @@ if __name__ == '__main__':
             ('$schema', 'http://json-schema.org/draft-04/schema#'),
             ('id', schema_id)
         ])
-        jsonschema.update(jsonschema_for_model(model))
+        jsonschema |= jsonschema_for_model(model)
         return jsonschema

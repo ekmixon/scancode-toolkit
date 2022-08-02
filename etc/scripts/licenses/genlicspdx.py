@@ -61,7 +61,7 @@ def cli(license_dir, verbose):
     licenses_by_key = load_licenses(with_deprecated=False)
 
 
-    for i, lic in enumerate(licenses_by_key.values()):
+    for lic in licenses_by_key.values():
         ld = lic.to_dict()
 
         if lic.spdx_license_key:
@@ -90,8 +90,7 @@ def cli(license_dir, verbose):
             click.echo('at: {output}'.format(**locals()))
 
         with io.open(output,  'w', encoding='utf-8') as ouput_file:
-            kwargs = dict(input=lic.text_file, spdx_tv=ouput_file)
-            kwargs.update(base_kwargs)
+            kwargs = dict(input=lic.text_file, spdx_tv=ouput_file) | base_kwargs
             run_scan(**kwargs)
 
 

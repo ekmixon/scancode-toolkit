@@ -139,23 +139,16 @@ class Differ(object):
         Returns:
           Array of changes.
         """
-        if text1 == None or text2 == None:
+        if text1 is None or text2 is None:
             raise ValueError('Illegal empty inputs')
 
         # Check for equality (speedup).
         if text1 == text2:
-            if text1:
-                return [(DIFF_EQUAL, text1)]
-            return []
-
+            return [(DIFF_EQUAL, text1)] if text1 else []
         # Set a deadline by which time the diff must be complete.
-        if deadline == None:
+        if deadline is None:
             # Unlike in most languages, Python counts time in seconds.
-            if not self.timeout:
-                deadline = sys.maxsize
-            else:
-                deadline = time.time() + self.timeout
-
+            deadline = time.time() + self.timeout if self.timeout else sys.maxsize
         # Trim off common prefix (speedup).
         commonlength = common_prefix(text1, text2)
         commonprefix = text1[:commonlength]
@@ -233,9 +226,7 @@ class Differ(object):
             # After the previous speedup, the character can't be an equality.
             return [(DIFF_DELETE, text1), (DIFF_INSERT, text2)]
 
-        # Check to see if the problem can be split in two.
-        hm = half_match(text1, text2, len_text1, len_text2)
-        if hm:
+        if hm := half_match(text1, text2, len_text1, len_text2):
             # A half-match was found, sort out the return data.
             (text1_a, text1_b, text2_a, text2_b, mid_common) = hm
             # Send both pairs off for separate processing.
@@ -428,11 +419,7 @@ def half_match(text1, text2, len_text1, len_text2):
 
     else:
         # Both matched.  Select the longest.
-        if len(hm1[4]) > len(hm2[4]):
-            hm = hm1
-        else:
-            hm = hm2
-
+        hm = hm1 if len(hm1[4]) > len(hm2[4]) else hm2
     # A half-match was found, sort out the return data.
     if reversed_diff:
         text1_a, text1_b, text2_a, text2_b, mid_common = hm
@@ -556,10 +543,7 @@ def cleanup_efficiency(diffs, editcost=4):
                     if equalities:
                         # Throw away the previous equality.
                         equalities.pop()
-                    if equalities:
-                        pointer = equalities[-1]
-                    else:
-                        pointer = -1
+                    pointer = equalities[-1] if equalities else -1
                     post_ins = post_del = False
                 changes = True
         pointer += 1

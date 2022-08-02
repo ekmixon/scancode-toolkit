@@ -11,7 +11,7 @@ from functools import partial
 
 
 def set_from_text(text):
-    return set(u.lower().strip('/') for u in text.split())
+    return {u.lower().strip('/') for u in text.split()}
 
 
 JUNK_EMAILS = set_from_text(u'''
@@ -217,9 +217,7 @@ def classify(s, data_set, suffixes=None, ignored_hosts=None):
             return False
     if any(d in s for d in data_set):
         return False
-    if suffixes and s.endswith(suffixes):
-        return False
-    return True
+    return not suffixes or not s.endswith(suffixes)
 
 
 classify_ip = partial(classify, data_set=JUNK_IPS)
@@ -242,8 +240,8 @@ def classify_url(url):
     if not url:
         return False
     u = url.lower().strip('/')
-    if (u in JUNK_URLS or
-        u.startswith(JUNK_URL_PREFIXES)
-        or u.endswith(JUNK_DOMAIN_SUFFIXES)):
-        return False
-    return True
+    return (
+        u not in JUNK_URLS
+        and not u.startswith(JUNK_URL_PREFIXES)
+        and not u.endswith(JUNK_DOMAIN_SUFFIXES)
+    )

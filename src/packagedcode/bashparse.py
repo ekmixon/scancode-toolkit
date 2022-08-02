@@ -21,9 +21,7 @@ from packagedcode.bashlex import BashShellLexer
 Extract and resolve variable from a Bash or shell script.
 """
 
-# Tracing flags
-TRACE = False or os.environ.get('SCANCODE_DEBUG_BASHPARSE', False)
-if TRACE:
+if TRACE := False or os.environ.get('SCANCODE_DEBUG_BASHPARSE', False):
     TRACE = int(TRACE)
 
 VALIDATE = False or os.environ.get('SCANCODE_DEBUG_BASHPARSE_VALIDATE', False)
@@ -151,8 +149,8 @@ class ShellVariable:
         """
         if self.is_array:
             for item in self.value:
-                return not any(c in item for c in '${}')
-        return not any(c in self.value for c in '${}')
+                return all(c not in item for c in '${}')
+        return all(c not in self.value for c in '${}')
 
     @classmethod
     def from_node(cls, node):
@@ -204,11 +202,9 @@ class ShellVariable:
         """
 
         def reportable(v):
-            if needed_variables:
-                return v.name in needed_variables
-            return True
+            return v.name in needed_variables if needed_variables else True
 
-        seen = dict()
+        seen = {}
         errors = []
         for var in variables:
             # check for duplicate names, but these could be redefinitions
@@ -232,9 +228,7 @@ class ShellVariable:
         """
 
         def reportable(v):
-            if needed_variables:
-                return v.name in needed_variables
-            return True
+            return v.name in needed_variables if needed_variables else True
 
         # mapping of variables that we use for resolution
         # the mappings and values are updated as resolution progresses
@@ -308,9 +302,7 @@ def dequote(token):
     }
     qs = quote_style_by_token_label.get(token.label)
     s = token.value
-    if qs and s.startswith(qs) and s.endswith(qs):
-        return s[1:-1]
-    return s
+    return s[1:-1] if qs and s.startswith(qs) and s.endswith(qs) else s
 
 
 def collect_shell_variables_from_text_as_dict(text, resolve=False, needed_variables=None):
@@ -395,7 +387,7 @@ def parse_shell(text, grammar=variables_grammar, loop=1, trace=TRACE, validate=V
         logger_debug(f'parse_shell: parsing tokens #: {len(tokens)}')
 
     if TRACE:
-        logger_debug(f'parse_shell: calling parser.parse')
+        logger_debug('parse_shell: calling parser.parse')
 
     parse_tree = parser.parse(tokens)
 

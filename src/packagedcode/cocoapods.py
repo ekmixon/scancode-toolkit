@@ -49,10 +49,10 @@ class CocoapodsPackage(models.Package):
         yield parse(location)
 
     def repository_homepage_url(self, baseurl=default_web_baseurl):
-        return '{}/pods/{}'.format(baseurl, self.name)
+        return f'{baseurl}/pods/{self.name}'
 
     def repository_download_url(self):
-        return '{}/archive/{}.zip'.format(self.homepage_url, self.version)
+        return f'{self.homepage_url}/archive/{self.version}.zip'
 
 
 def is_podspec(location):
@@ -103,7 +103,7 @@ def build_package(podspec_data):
 
     parties = list(party_mapper(author_names, author_email))
 
-    package = CocoapodsPackage(
+    return CocoapodsPackage(
         name=name,
         version=version,
         vcs_url=source,
@@ -111,10 +111,8 @@ def build_package(podspec_data):
         description=description,
         declared_license=declared_license,
         homepage_url=homepage_url,
-        parties=parties
+        parties=parties,
     )
-
-    return package
 
 
 def party_mapper(author, email):
@@ -160,13 +158,12 @@ def parse_person(person):
     >>> p = parse_person('Rohit Potter')
     >>> assert p == ('Rohit Potter', None)
     """
-    parsed = person_parser(person)
-    if not parsed:
-        parsed = person_parser_only_name(person)
-        name = parsed.group('name')
-        email = None
-    else:
+    if parsed := person_parser(person):
         name = parsed.group('name')
         email = parsed.group('email')
 
+    else:
+        parsed = person_parser_only_name(person)
+        name = parsed.group('name')
+        email = None
     return name, email

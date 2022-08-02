@@ -68,15 +68,11 @@ class DebianPackage(models.Package):
 
         # Multi-Arch can be: foreign, same, allowed or empty
         # We only need to adjust the md5sum path in the case of `same`
-        if self.multi_arch == 'same':
-            arch = ':{}'.format(self.qualifiers.get('arch'))
-        else:
-            arch = ''
-
-        package_md5sum = '{}{}.md5sums'.format(self.name, arch)
+        arch = f":{self.qualifiers.get('arch')}" if self.multi_arch == 'same' else ''
+        package_md5sum = f'{self.name}{arch}.md5sums'
         md5sum_file = os.path.join(var_lib_dpkg_info_dir, package_md5sum)
 
-        package_list = '{}{}.list'.format(self.name, arch)
+        package_list = f'{self.name}{arch}.list'
         list_file = os.path.join(var_lib_dpkg_info_dir, package_list)
 
         has_md5 = os.path.exists(md5sum_file)
@@ -98,7 +94,7 @@ class DebianPackage(models.Package):
 
                     path = path.strip()
                     if not path.startswith('/'):
-                        path = '/' + path
+                        path = f'/{path}'
 
                     # we ignore dirs in general, and we ignore these that would
                     # be created a plain dir when we can
@@ -121,7 +117,7 @@ class DebianPackage(models.Package):
 
                     path = path.strip()
                     if not path.startswith('/'):
-                        path = '/' + path
+                        path = f'/{path}'
 
                     # we ignore dirs in general, and we ignore these that would
                     # be created a plain dir when we can
@@ -175,8 +171,7 @@ def get_installed_packages(root_dir, distro='debian', detect_licenses=False, **k
         package.populate_installed_files(var_lib_dpkg_info_dir)
         if detect_licenses:
             copyright_location = package.get_copyright_file_path(root_dir)
-            dc = debian_copyright.parse_copyright_file(copyright_location)
-            if dc:
+            if dc := debian_copyright.parse_copyright_file(copyright_location):
                 package.declared_license = dc.get_declared_license(
                     filter_duplicates=True,
                     skip_debian_packaging=True,
@@ -202,7 +197,10 @@ def parse_status_file(location, distro='debian'):
     Yield Debian Package objects from a dpkg `status` file or None.
     """
     if not os.path.exists(location):
-        raise FileNotFoundError('[Errno 2] No such file or directory: {}'.format(repr(location)))
+        raise FileNotFoundError(
+            f'[Errno 2] No such file or directory: {repr(location)}'
+        )
+
     if not is_debian_status_file(location):
         return
 
@@ -238,11 +236,10 @@ def build_package(package_data, distro='debian'):
 
     for source, target in plain_fields:
         value = package_data.get(source)
+        if value and isinstance(value, str):
+            value = value.strip()
         if value:
-            if isinstance(value, str):
-                value = value.strip()
-            if value:
-                setattr(package, target, value)
+            setattr(package, target, value)
 
     # mapping of top level `status` file items to a function accepting as
     # arguments the package.json element value and returning an iterable of key,
@@ -255,8 +252,7 @@ def build_package(package_data, distro='debian'):
 
     for source, func in field_mappers:
         logger.debug('parse: %(source)r, %(func)r' % locals())
-        value = package_data.get(source) or None
-        if value:
+        if value := package_data.get(source) or None:
             func(value, package)
 
     # parties_mapper() need mutiple fields:
@@ -327,7 +323,6 @@ ignored_root_dirs = {
     '/proc',
     '/root',
     '/run',
-    '/usr',
     '/sbin',
     '/snap',
     '/sys',
@@ -340,7 +335,6 @@ ignored_root_dirs = {
     '/usr/share/man',
     '/usr/share/misc',
     '/usr/src',
-
     '/var',
     '/var/backups',
     '/var/cache',

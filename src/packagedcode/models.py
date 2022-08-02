@@ -551,8 +551,9 @@ class Package(BasePackage):
         """
         if not Package.is_ignored_package_resource(package_root, codebase):
             yield package_root
-        for resource in package_root.walk(codebase, topdown=True, ignored=Package.is_ignored_package_resource):
-            yield resource
+        yield from package_root.walk(
+            codebase, topdown=True, ignored=Package.is_ignored_package_resource
+        )
 
     @classmethod
     def ignore_resource(cls, resource, codebase):

@@ -69,8 +69,8 @@ class IgnoreCopyrights(OutputFilterPlugin):
         ignored_authors = [re.compile(r) for r in ignore_author]
 
         for resource in codebase.walk():
-            holders = set(c['value'] for c in getattr(resource, 'holders', []))
-            authors = set(c['value'] for c in getattr(resource, 'authors', []))
+            holders = {c['value'] for c in getattr(resource, 'holders', [])}
+            authors = {c['value'] for c in getattr(resource, 'authors', [])}
             if TRACE:
                 logger_debug('holders:', holders)
                 logger_debug('authors:', authors)

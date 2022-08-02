@@ -107,34 +107,30 @@ def build_package(package_data):
     repo_type = repository.get('type')
     repo_url = repository.get('url')
 
-    vcs_url = None
-    if repo_type and repo_url:
-        vcs_url = '{}+{}'.format(repo_type, repo_url)
-
+    vcs_url = f'{repo_type}+{repo_url}' if repo_type and repo_url else None
     deps = package_data.get('dependencies') or {}
-    dependencies = []
-    for dep_name, requirement in deps.items():
-        dependencies.append(
-            models.DependentPackage(
-                purl=PackageURL(type='bower', name=dep_name).to_string(),
-                scope='dependencies',
-                requirement=requirement,
-                is_runtime=True,
-                is_optional=False,
-            )
+    dependencies = [
+        models.DependentPackage(
+            purl=PackageURL(type='bower', name=dep_name).to_string(),
+            scope='dependencies',
+            requirement=requirement,
+            is_runtime=True,
+            is_optional=False,
         )
+        for dep_name, requirement in deps.items()
+    ]
 
     dev_dependencies = package_data.get('devDependencies') or {}
-    for dep_name, requirement in dev_dependencies.items():
-        dependencies.append(
-            models.DependentPackage(
-                purl=PackageURL(type='bower', name=dep_name).to_string(),
-                scope='devDependencies',
-                requirement=requirement,
-                is_runtime=False,
-                is_optional=True,
-            )
+    dependencies.extend(
+        models.DependentPackage(
+            purl=PackageURL(type='bower', name=dep_name).to_string(),
+            scope='devDependencies',
+            requirement=requirement,
+            is_runtime=False,
+            is_optional=True,
         )
+        for dep_name, requirement in dev_dependencies.items()
+    )
 
     return BowerPackage(
         name=name,
@@ -160,8 +156,7 @@ def compute_normalized_license(declared_license):
     detected_licenses = []
 
     for declared in declared_license:
-        detected_license = models.compute_normalized_license(declared)
-        if detected_license:
+        if detected_license := models.compute_normalized_license(declared):
             detected_licenses.append(detected_license)
         else:
             detected_licenses.append('unknown')

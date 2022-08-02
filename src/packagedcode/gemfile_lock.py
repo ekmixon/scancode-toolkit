@@ -188,11 +188,9 @@ class Gem(object):
             self.spec_version = self.version
             if self.revision and not self.ref:
                 self.version = self.revision
-            elif self.revision and self.ref:
+            elif self.revision:
                 self.version = self.revision
-            elif not self.revision and self.ref:
-                self.version = self.ref
-            elif not self.revision and self.ref:
+            elif self.ref:
                 self.version = self.ref
 
     def as_nv_tree(self):
@@ -201,9 +199,8 @@ class Gem(object):
         dicts. The tree root is self. Each key is a name/version tuple.
         Values are dicts.
         """
-        tree = {}
         root = (self.name, self.version,)
-        tree[root] = {}
+        tree = {root: {}}
         for _name, gem in self.dependencies.items():
             tree[root].update(gem.as_nv_tree())
         return tree
@@ -237,9 +234,8 @@ class Gem(object):
         Return a tree of dependencies as nested mappings.
         Each key is a "name@version" string and values are dicts.
         """
-        tree = {}
-        root = '{}@{}'.format(self.name or '', self.version or '')
-        tree[root] = {}
+        root = f"{self.name or ''}@{self.version or ''}"
+        tree = {root: {}}
         for _name, gem in self.dependencies.items():
             tree[root].update(gem.dependency_tree())
         return tree
@@ -267,7 +263,7 @@ class Gem(object):
 
     @property
     def gem_name(self):
-        return '{}-{}.gem'.format(self.name, self.version)
+        return f'{self.name}-{self.version}.gem'
 
 
 OPTIONS = re.compile(r'^  (?P<key>[a-z]+): (?P<value>.*)$').match
@@ -280,8 +276,7 @@ def get_option(s):
     key = None
     value = None
 
-    opts = OPTIONS(s)
-    if opts:
+    if opts := OPTIONS(s):
         key = opts.group('key') or None
         value = opts.group('value') or None
         # normalize truth
@@ -431,8 +426,7 @@ class GemfileLockParser(object):
             self.current_options[key] = value
 
     def parse_spec(self, line):
-        spec_dep = SPEC_DEPS(line)
-        if spec_dep:
+        if spec_dep := SPEC_DEPS(line):
             name = spec_dep.group('name')
             # first level dep is always an exact version
             version = spec_dep.group('version')
@@ -450,8 +444,7 @@ class GemfileLockParser(object):
                 setattr(self.current_gem, k, v)
             return
 
-        spec_sub_dep = SPEC_SUB_DEPS(line)
-        if spec_sub_dep:
+        if spec_sub_dep := SPEC_SUB_DEPS(line):
             name = spec_sub_dep.group('name')
             if name == 'bundler':
                 return
@@ -503,17 +496,14 @@ class GemfileLockParser(object):
         else:
             self.dependency_tree[name] = gem
 
-        version = deps.group('version') or []
-        if version:
+        if version := deps.group('version') or []:
             version = [v.strip() for v in version.split(',')]
             # the version of a direct dep is always a constraint
             # we append these at the top of the list as this is
             # the main constraint
             for v in version:
                 gem.requirements.insert(0, v)
-            # assert gem.version == version
-
-        gem.pinned = True if deps.group('pinned') else False
+        gem.pinned = bool(deps.group('pinned'))
 
     def parse_platform(self, line):
         plat = PLATS(line)

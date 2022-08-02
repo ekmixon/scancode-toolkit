@@ -72,8 +72,7 @@ class NpmPackage(models.Package):
 
     @classmethod
     def recognize(cls, location):
-        for package in parse(location):
-            yield package
+        yield from parse(location)
 
     @classmethod
     def get_package_root(cls, manifest_resource, codebase):
@@ -108,8 +107,7 @@ def compute_normalized_license(declared_license):
 
     for declared in declared_license:
         if isinstance(declared, str):
-            detected_license = models.compute_normalized_license(declared)
-            if detected_license:
+            if detected_license := models.compute_normalized_license(declared):
                 detected_licenses.append(detected_license)
 
         elif isinstance(declared, dict):
@@ -121,22 +119,18 @@ def compute_normalized_license(declared_license):
             url = declared.get('url')
             via_url = models.compute_normalized_license(url)
 
-            if via_type:
-                # The type should have precedence and any unknowns
-                # in url should be ignored.
-                # TODO: find a better way to detect unknown licenses
-                if via_url in ('unknown', 'unknown-license-reference',):
-                    via_url = None
+            if via_type and via_url in (
+                'unknown',
+                'unknown-license-reference',
+            ):
+                via_url = None
 
             if via_type:
-                if via_type == via_url:
+                if via_type != via_url and not via_url or via_type == via_url:
                     detected_licenses.append(via_type)
                 else:
-                    if not via_url:
-                        detected_licenses.append(via_type)
-                    else:
-                        combined_expression = combine_expressions([via_type, via_url])
-                        detected_licenses.append(combined_expression)
+                    combined_expression = combine_expressions([via_type, via_url])
+                    detected_licenses.append(combined_expression)
             elif via_url:
                 detected_licenses.append(via_url)
 
@@ -158,10 +152,7 @@ def npm_homepage_url(namespace, name, registry='https://www.npmjs.com/package'):
     """
     registry = registry.rstrip('/')
 
-    if namespace:
-        ns_name = '/'.join([namespace, name])
-    else:
-        ns_name = name
+    ns_name = '/'.join([namespace, name]) if namespace else name
     return '%(registry)s/%(ns_name)s' % locals()
 
 
@@ -176,10 +167,7 @@ def npm_download_url(namespace, name, version, registry='https://registry.npmjs.
     >>> assert npm_download_url(None, 'angular', '1.6.6') == 'https://registry.npmjs.org/angular/-/angular-1.6.6.tgz'
     """
     registry = registry.rstrip('/')
-    if namespace:
-        ns_name = '/'.join([namespace, name])
-    else:
-        ns_name = name
+    ns_name = '/'.join([namespace, name]) if namespace else name
     return '{registry}/{ns_name}/-/{name}-{version}.tgz'.format(**locals())
 
 
@@ -210,7 +198,7 @@ def npm_api_url(namespace, name, version=None, registry='https://registry.npmjs.
         ns_name = name
 
     if version:
-        version = '/' + version
+        version = f'/{version}'
     return '{registry}/{ns_name}{version}'.format(**locals())
 
 
@@ -246,13 +234,10 @@ def parse(location):
     if is_package_lock(location) or is_npm_shrinkwrap(location):
         with io.open(location, encoding='utf-8') as loc:
             package_data = json.load(loc)
-        for package in build_packages_from_lockfile(package_data):
-            yield package
-
+        yield from build_packages_from_lockfile(package_data)
     if is_yarn_lock(location):
         with io.open(location, encoding='utf-8') as loc:
-            for package in build_packages_from_yarn_lock(loc):
-                yield package
+            yield from build_packages_from_yarn_lock(loc)
 
 
 def build_package(package_data):
@@ -271,10 +256,7 @@ def build_package(package_data):
         return
 
     if isinstance(homepage, list):
-        if homepage:
-            homepage = homepage[0]
-        else:
-            homepage = ''
+        homepage = homepage[0] if homepage else ''
     namespace, name = split_scoped_package_name(name)
     package = NpmPackage(
         namespace=namespace or None,
@@ -307,11 +289,10 @@ def build_package(package_data):
     for source, func in field_mappers:
         if TRACE: logger.debug('parse: %(source)r, %(func)r' % locals())
         value = package_data.get(source) or None
+        if value and isinstance(value, str):
+            value = value.strip()
         if value:
-            if isinstance(value, str):
-                value = value.strip()
-            if value:
-                func(value, package)
+            func(value, package)
 
     if not package.download_url:
         # Only add a synthetic download URL if there is none from the dist mapping.
@@ -524,8 +505,7 @@ def vcs_repository_mapper(repo, package, vcs_revision=None):
         vcs_repository = normalize_vcs_url(repo)
 
     elif isinstance(repo, dict):
-        repo_url = normalize_vcs_url(repo.get('url'))
-        if repo_url:
+        if repo_url := normalize_vcs_url(repo.get('url')):
             vcs_tool = repo.get('type') or 'git'
             # remove vcs_tool string if repo_url already contains it
             if repo_url.startswith(vcs_tool):
@@ -533,13 +513,9 @@ def vcs_repository_mapper(repo, package, vcs_revision=None):
             vcs_repository = repo_url
 
     if vcs_repository:
-        if vcs_tool:
-            vcs_url = '{}+{}'.format(vcs_tool, vcs_repository)
-        else:
-            vcs_url = vcs_repository
-
+        vcs_url = f'{vcs_tool}+{vcs_repository}' if vcs_tool else vcs_repository
         if vcs_revision:
-            vcs_url += '@' + vcs_revision
+            vcs_url += f'@{vcs_revision}'
         package.vcs_url = vcs_url
     return package
 
@@ -557,8 +533,7 @@ def dist_mapper(dist, package):
     if not isinstance(dist, dict):
         return
 
-    integrity = dist.get('integrity') or None
-    if integrity:
+    if integrity := dist.get('integrity') or None:
         algo, _, b64value = integrity.partition('-')
         algo = algo.lower()
         assert 'sha512' == algo
@@ -570,8 +545,7 @@ def dist_mapper(dist, package):
             sha512 = decoded_b64value.hex()
         package.sha512 = sha512
 
-    sha1 = dist.get('shasum')
-    if sha1:
+    if sha1 := dist.get('shasum'):
         package.sha1 = sha1
 
     dnl_url = dist.get('dnl_url')
@@ -651,7 +625,7 @@ def deps_mapper(deps, package, field_name):
             overridable.is_optional = True
             overridable.scope = field_name
         else:
-            dependency_attributes = npm_dependency_scopes_attributes.get(field_name, dict())
+            dependency_attributes = npm_dependency_scopes_attributes.get(field_name, {})
             dep = models.DependentPackage(
                 purl=purl,
                 scope=field_name,
@@ -730,20 +704,17 @@ def parse_person(person):
     url = None
 
     if isinstance(person, str):
-        parsed = person_parser(person)
-        if not parsed:
-            parsed = person_parser_no_name(person)
-            if not parsed:
-                return person, None, None
-            else:
-                name = None
-                email = parsed.group('email')
-                url = parsed.group('url')
-        else:
+        if parsed := person_parser(person):
             name = parsed.group('name')
             email = parsed.group('email')
             url = parsed.group('url')
 
+        elif parsed := person_parser_no_name(person):
+            name = None
+            email = parsed.group('email')
+            url = parsed.group('url')
+        else:
+            return person, None, None
     elif isinstance(person, dict):
         # ensure we have our three values
         name = person.get('name')
@@ -886,29 +857,27 @@ def build_packages_from_lockfile(package_data):
         else:
             packages.append(p)
 
-    package_deps = []
-    for package in packages:
-        package_deps.append(
-            models.DependentPackage(
-                purl=package.purl,
-                scope='dependencies',
-                is_runtime=True,
-                is_optional=False,
-                is_resolved=True,
-            )
+    package_deps = [
+        models.DependentPackage(
+            purl=package.purl,
+            scope='dependencies',
+            is_runtime=True,
+            is_optional=False,
+            is_resolved=True,
         )
+        for package in packages
+    ]
 
-    dev_package_deps = []
-    for dev_package in dev_packages:
-        dev_package_deps.append(
-            models.DependentPackage(
-                purl=dev_package.purl,
-                scope='dependencies-dev',
-                is_runtime=False,
-                is_optional=True,
-                is_resolved=True,
-            )
+    dev_package_deps = [
+        models.DependentPackage(
+            purl=dev_package.purl,
+            scope='dependencies-dev',
+            is_runtime=False,
+            is_optional=True,
+            is_resolved=True,
         )
+        for dev_package in dev_packages
+    ]
 
     yield NpmPackage(
         name=package_data.get('name'),
@@ -916,8 +885,7 @@ def build_packages_from_lockfile(package_data):
         dependencies=package_deps + dev_package_deps,
     )
 
-    for package in packages + dev_packages:
-        yield package
+    yield from packages + dev_packages
 
 
 def build_packages_from_yarn_lock(yarn_lock_lines):
@@ -932,16 +900,7 @@ def build_packages_from_yarn_lock(yarn_lock_lines):
         # Check if this is not an empty line or comment
         if line.strip() and not line.startswith('#'):
             if line.startswith(' '):
-                if not dependencies:
-                    if line.strip().startswith('version'):
-                        current_package_data['version'] = line.partition('version')[2].strip().strip('\"')
-                    elif line.strip().startswith('resolved'):
-                        current_package_data['download_url'] = line.partition('resolved')[2].strip().strip('\"')
-                    elif line.strip().startswith('dependencies'):
-                        dependencies = True
-                    else:
-                        continue
-                else:
+                if dependencies:
                     split_line = line.strip().split()
                     if len(split_line) == 2:
                         k, v = split_line
@@ -951,6 +910,14 @@ def build_packages_from_yarn_lock(yarn_lock_lines):
                             current_package_data['dependencies'].append((k, v))
                         else:
                             current_package_data['dependencies'] = [(k, v)]
+                elif line.strip().startswith('version'):
+                    current_package_data['version'] = line.partition('version')[2].strip().strip('\"')
+                elif line.strip().startswith('resolved'):
+                    current_package_data['download_url'] = line.partition('resolved')[2].strip().strip('\"')
+                elif line.strip().startswith('dependencies'):
+                    dependencies = True
+                else:
+                    continue
             else:
                 dependencies = False
                 # Clean up dependency name and requirement strings
@@ -976,17 +943,20 @@ def build_packages_from_yarn_lock(yarn_lock_lines):
         else:
             deps = []
             if current_package_data:
-                for dep, req in current_package_data.get('dependencies', []):
-                    deps.append(
-                        models.DependentPackage(
-                            purl=PackageURL(type='npm', name=dep).to_string(),
-                            scope='dependencies',
-                            requirement=req,
-                            is_runtime=True,
-                            is_optional=False,
-                            is_resolved=True,
-                        )
+                deps.extend(
+                    models.DependentPackage(
+                        purl=PackageURL(type='npm', name=dep).to_string(),
+                        scope='dependencies',
+                        requirement=req,
+                        is_runtime=True,
+                        is_optional=False,
+                        is_resolved=True,
                     )
+                    for dep, req in current_package_data.get(
+                        'dependencies', []
+                    )
+                )
+
                 packages.append(
                     NpmPackage(
                         namespace=current_package_data.get('namespace'),
@@ -1023,23 +993,19 @@ def build_packages_from_yarn_lock(yarn_lock_lines):
         )
         packages_reqs.append(current_package_data.get('requirement'))
 
-    packages_dependencies = []
-    for package, requirement in zip(packages, packages_reqs):
-        packages_dependencies.append(
-            models.DependentPackage(
-                purl=PackageURL(
-                    type='npm',
-                    name=package.name,
-                    version=package.version
-                ).to_string(),
-                requirement=requirement,
-                scope='dependencies',
-                is_runtime=True,
-                is_optional=False,
-                is_resolved=True,
-            )
+    packages_dependencies = [
+        models.DependentPackage(
+            purl=PackageURL(
+                type='npm', name=package.name, version=package.version
+            ).to_string(),
+            requirement=requirement,
+            scope='dependencies',
+            is_runtime=True,
+            is_optional=False,
+            is_resolved=True,
         )
+        for package, requirement in zip(packages, packages_reqs)
+    ]
 
     yield NpmPackage(dependencies=packages_dependencies)
-    for package in packages:
-        yield package
+    yield from packages

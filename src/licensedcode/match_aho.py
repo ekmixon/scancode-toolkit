@@ -64,8 +64,7 @@ def add_sequence(automaton, tids, rid, start=0, with_duplicates=False):
     value = rid, start, start + end
     tokens = tuple(tids)
     if with_duplicates:
-        existing = automaton.get(tokens, None)
-        if existing:
+        if existing := automaton.get(tokens, None):
             # ensure that for identical strings added several times, all rid/pos are
             # added to the value set
             existing.append(value)

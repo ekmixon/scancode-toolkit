@@ -73,6 +73,3 @@ def is_special_legal_file(location):
 
     elif any(name_lower_contains_special):
         return 'maybe'
-    else:
-        # return False for now?
-        pass

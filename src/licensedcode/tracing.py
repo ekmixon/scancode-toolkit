@@ -62,4 +62,4 @@ def matched_rule_tokens_str(match):
             if pos in match.ispan:
                 yield token
             else:
-                yield '<%s>' % token
+                yield f'<{token}>'

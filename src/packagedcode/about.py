@@ -38,8 +38,7 @@ class AboutPackage(models.Package):
         yield parse(location)
 
     def get_package_root(self, manifest_resource, codebase):
-        about_resource = self.extra_data.get('about_resource')
-        if about_resource:
+        if about_resource := self.extra_data.get('about_resource'):
             manifest_resource_parent = manifest_resource.parent(codebase)
             for child in manifest_resource_parent.children(codebase):
                 if child.name == about_resource:

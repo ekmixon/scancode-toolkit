@@ -132,7 +132,7 @@ def get_results(codebase, as_list=False, **kwargs):
 
     # add codebase toplevel attributes such as summaries
     if codebase.attributes:
-        results.update(codebase.attributes.to_dict())
+        results |= codebase.attributes.to_dict()
 
     files = OutputPlugin.get_files(codebase, **kwargs)
     if as_list:

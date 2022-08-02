@@ -333,7 +333,7 @@ def get_normalized_package_data(manifest_main_section):
         m_vcs_url = normalize_vcs_url(m_vcs_url)
         m_vcs_rev = dget('Change') or dget('Branch') or ''
         m_vcs_rev = m_vcs_rev.strip()
-        m_vcs_rev = m_vcs_rev and ('@' + m_vcs_rev)
+        m_vcs_rev = m_vcs_rev and f'@{m_vcs_rev}'
         m_vcs_subpath = dget('Module-Source') or ''
         m_vcs_subpath = m_vcs_subpath.strip('/').strip()
         m_vcs_subpath = m_vcs_subpath and ('#' + m_vcs_subpath.strip('/'))
@@ -350,7 +350,7 @@ def get_normalized_package_data(manifest_main_section):
         s_vcs_rev = dget('Scm-Revision') or ''
         s_vcs_rev = s_vcs_rev.strip()
         if s_vcs_rev:
-            s_vcs_rev = '@' + s_vcs_rev
+            s_vcs_rev = f'@{s_vcs_rev}'
 
         if s_vcs_url.strip():
             code_view_url = s_vcs_url

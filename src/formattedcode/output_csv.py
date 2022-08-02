@@ -142,7 +142,7 @@ def flatten_scan(scan, headers):
                             mrv = '{:.2f}'.format(mrv)
                         else:
                             mrv = pretty(mrv)
-                        mrk = 'matched_rule__' + mrk
+                        mrk = f'matched_rule__{mrk}'
                         lic[mrk] = mrv
                     continue
 
@@ -153,7 +153,7 @@ def flatten_scan(scan, headers):
                 # lines are present in multiple scans: keep their column name as
                 # not scan-specific. Prefix othe columns with license__
                 if k not in ('start_line', 'end_line',):
-                    k = 'license__' + k
+                    k = f'license__{k}'
                 lic[k] = val
             collect_keys(lic, 'license')
             yield lic
@@ -210,9 +210,12 @@ def pretty(data):
     seqtypes = list, tuple
     maptypes = dict, dict
     coltypes = seqtypes + maptypes
-    if isinstance(data, seqtypes):
-        if len(data) == 1 and isinstance(data[0], str):
-            return data[0].strip()
+    if (
+        isinstance(data, seqtypes)
+        and len(data) == 1
+        and isinstance(data[0], str)
+    ):
+        return data[0].strip()
     if isinstance(data, coltypes):
         return saneyaml.dump(
             data, indent=2, encoding='utf-8').decode('utf-8').strip()
@@ -252,7 +255,7 @@ def get_package_columns(_columns=set()):
     ]
 
     fields = Package.fields() + extra_columns
-    _columns = set(f for f in fields if f not in excluded_columns)
+    _columns = {f for f in fields if f not in excluded_columns}
     return _columns
 
 
@@ -276,7 +279,7 @@ def flatten_package(_package, path, prefix='package__'):
                 # prefix versions with a v to avoid spreadsheet tools to mistake
                 # a version for a number or date when reading CSVs (common with
                 # Excel and LibreOffice).
-                val = 'v ' + val
+                val = f'v {val}'
             pack[nk] = val
             continue
 
@@ -287,7 +290,7 @@ def flatten_package(_package, path, prefix='package__'):
                     if component_key not in package_columns:
                         continue
 
-                    component_new_key = nk + '__' + component_key
+                    component_new_key = f'{nk}__{component_key}'
 
                     if component_val is None:
                         pack[component_new_key] = ''
@@ -316,9 +319,7 @@ def flatten_package(_package, path, prefix='package__'):
 
         if isinstance(val, str):
             pack[nk] = val
-        else:
-            # Use repr if not a string
-            if val:
-                pack[nk] = pretty(val)
+        elif val:
+            pack[nk] = pretty(val)
 
     return pack

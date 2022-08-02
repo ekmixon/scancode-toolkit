@@ -97,12 +97,12 @@ def spdx_id_match(idx, query_run, text, expression_symbols=None):
     qspan = Span(range(match_start, query_run.end + 1))
 
     # we use the query side to build the ispans
-    ispan = Span(range(0, match_len))
+    ispan = Span(range(match_len))
 
     len_legalese = idx.len_legalese
     hispan = Span(p for p, t in enumerate(matched_tokens) if t < len_legalese)
 
-    match = LicenseMatch(
+    return LicenseMatch(
         rule=rule,
         qspan=qspan,
         ispan=ispan,
@@ -111,7 +111,6 @@ def spdx_id_match(idx, query_run, text, expression_symbols=None):
         matcher=MATCH_SPDX_ID,
         query=query_run.query,
     )
-    return match
 
 
 def get_spdx_expression(text, expression_symbols=None):
@@ -312,16 +311,7 @@ def _reparse_invalid_expression(
     if not has_symbols:
         return unknown_symbol
 
-    # Build and reparse a synthetic expression using a default AND as keyword.
-    # This expression may not be a correct repsentation of the invalid original,
-    # but it always contains an unknown symbol if this is a not a simple uboot-
-    # style OR expression.
-    joined_as = ' AND '
-    if not has_keywords:
-        # this is bare list of symbols without parens and keywords, u-boot-
-        # style: we assume the OR keyword
-        joined_as = ' OR '
-
+    joined_as = ' AND ' if has_keywords else ' OR '
     expression_text = joined_as.join(s.key for s in filtered_tokens)
     expression = _parse_expression(
         expression_text, licensing, expression_symbols, unknown_symbol)
@@ -356,8 +346,8 @@ def clean_text(text):
     punctuation_spaces = "!\"#$%&'*,-./:;<=>?@[\\]^_`{|}~\t\r\n "
     # remove significant expression punctuations in wrong spot: closing parens
     # at head and opening parens or + at tail.
-    leading_punctuation_spaces = punctuation_spaces + ")+"
-    trailng_punctuation_spaces = punctuation_spaces + "("
+    leading_punctuation_spaces = f"{punctuation_spaces})+"
+    trailng_punctuation_spaces = f"{punctuation_spaces}("
     text = text.lstrip(leading_punctuation_spaces).rstrip(trailng_punctuation_spaces)
     # try to fix some common cases of leading and trailing missing parense
     open_parens_count = text.count('(')
@@ -385,8 +375,5 @@ def split_spdx_lid(text):
     """
     segments = _split_spdx_lid(text)
     expression = segments[-1]
-    if len(segments) > 1:
-        return segments[-2], expression
-    else:
-        return None, text
+    return (segments[-2], expression) if len(segments) > 1 else (None, text)
 

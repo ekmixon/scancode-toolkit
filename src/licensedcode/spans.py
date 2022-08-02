@@ -103,11 +103,11 @@ class Span(Set):
 
         elif len_args == 1:
             # args0 is a single int or an iterable of ints
-            if isinstance(args[0], int):
-                self._set = intbitset(args)
-            else:
-                # some sequence or iterable
-                self._set = intbitset(list(args[0]))
+            self._set = (
+                intbitset(args)
+                if isinstance(args[0], int)
+                else intbitset(list(args[0]))
+            )
 
         elif len_args == 2:
             # args0 and args1 describe a start and end closed range
@@ -284,9 +284,7 @@ class Span(Set):
         >>> Span([0]).magnitude()
         1
         """
-        if not self._set:
-            return 0
-        return self.end - self.start + 1
+        return self.end - self.start + 1 if self._set else 0
 
     def density(self):
         """
@@ -305,9 +303,7 @@ class Span(Set):
         >>> Span().density()
         0
         """
-        if not self._set:
-            return 0
-        return len(self) / self.magnitude()
+        return len(self) / self.magnitude() if self._set else 0
 
     def overlap(self, other):
         """
@@ -338,8 +334,7 @@ class Span(Set):
             return 0
         if self._set == other._set:
             return 1
-        resemblance = self.overlap(other) / len(self | other)
-        return resemblance
+        return self.overlap(other) / len(self | other)
 
     def containment(self, other):
         """
@@ -350,10 +345,7 @@ class Span(Set):
         """
         if self._set.isdisjoint(other._set):
             return 0
-        if self._set == other._set:
-            return 1
-        containment = self.overlap(other) / len(other)
-        return containment
+        return 1 if self._set == other._set else self.overlap(other) / len(other)
 
     def surround(self, other):
         """

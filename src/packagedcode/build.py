@@ -89,10 +89,7 @@ def check_rule_name_ending(rule_name):
 
     Return False otherwise
     """
-    for rule_type in starlark_rule_types:
-        if rule_name.endswith(rule_type):
-            return True
-    return False
+    return any(rule_name.endswith(rule_type) for rule_type in starlark_rule_types)
 
 
 @attr.s()
@@ -202,11 +199,15 @@ class MetadataBzl(BaseBuildManifestPackage):
 
         metadata_fields = {}
         for statement in tree.body:
-            if not (hasattr(statement, 'targets') and isinstance(statement, ast.Assign)):
+            if not hasattr(statement, 'targets') or not isinstance(
+                statement, ast.Assign
+            ):
                 continue
             # We are looking for a dictionary assigned to the variable `METADATA`
             for target in statement.targets:
-                if not (target.id == 'METADATA' and isinstance(statement.value, ast.Dict)):
+                if target.id != 'METADATA' or not isinstance(
+                    statement.value, ast.Dict
+                ):
                     continue
                 # Once we find the dictionary assignment, get and store its contents
                 statement_keys = statement.value.keys
@@ -216,25 +217,20 @@ class MetadataBzl(BaseBuildManifestPackage):
                         key_name = statement_k.s
                     # The list values in a `METADATA.bzl` file seem to only contain strings
                     if isinstance(statement_v, ast.List):
-                        value = []
-                        for e in statement_v.elts:
-                            if not isinstance(e, ast.Str):
-                                continue
-                            value.append(e.s)
+                        value = [e.s for e in statement_v.elts if isinstance(e, ast.Str)]
                     if isinstance(statement_v, ast.Str):
                         value = statement_v.s
                     metadata_fields[key_name] = value
 
-        parties = []
         maintainers = metadata_fields.get('maintainers', [])
-        for maintainer in maintainers:
-            parties.append(
-                models.Party(
-                    type=models.party_org,
-                    name=maintainer,
-                    role='maintainer',
-                )
+        parties = [
+            models.Party(
+                type=models.party_org,
+                name=maintainer,
+                role='maintainer',
             )
+            for maintainer in maintainers
+        ]
 
         # TODO: Create function that determines package type from download URL,
         # then create a package of that package type from the metadata info

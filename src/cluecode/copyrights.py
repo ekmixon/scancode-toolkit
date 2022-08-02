@@ -250,11 +250,19 @@ class CopyrightDetector(object):
         parse_tree = self.parser.parse(lexed_text)
         if TRACE: logger_debug(f'CopyrightDetector: parse_tree: {parse_tree}')
 
-        non_copyright_labels = frozenset()
-        if not include_years:
-            non_copyright_labels = frozenset([
-                'YR-RANGE', 'YR', 'YR-AND', 'YR-PLUS', 'BARE-YR',
-            ])
+        non_copyright_labels = (
+            frozenset()
+            if include_years
+            else frozenset(
+                [
+                    'YR-RANGE',
+                    'YR',
+                    'YR-AND',
+                    'YR-PLUS',
+                    'BARE-YR',
+                ]
+            )
+        )
 
         non_holder_labels = frozenset([
             'COPY',
@@ -280,8 +288,6 @@ class CopyrightDetector(object):
             if not isinstance(tree_node, tree.Tree):
                 continue
 
-                if TRACE: logger_debug(f'CopyrightDetector: parse_tree node: {tree_node}')
-
             tree_node_label = tree_node.label
 
             if (copyrights or holders) and 'COPYRIGHT' in tree_node_label:
@@ -301,40 +307,29 @@ class CopyrightDetector(object):
                         yield copyrght
 
                     if holders:
-                        # By default we strip email and urls from holders ....
-                        holder = Detection.from_node(
+                        if holder := Detection.from_node(
                             node=tree_node,
                             type='holders',
                             ignores=non_holder_labels,
                             refiner=refine_holder,
-                        )
-
-                        if not holder:
-                            # ... but if we have no holder, we try again and
-                            # this time we keep email and URLs for holders using
-                            # "non_holder_labels_mini" as an ignores label set
-                            holder = Detection.from_node(
-                                node=tree_node,
-                                type='holders',
-                                ignores=non_holder_labels_mini,
-                                refiner=refine_holder,
-                            )
-
-                        if holder:
+                        ) or Detection.from_node(
+                            node=tree_node,
+                            type='holders',
+                            ignores=non_holder_labels_mini,
+                            refiner=refine_holder,
+                        ):
                             if TRACE: logger_debug(f'CopyrightDetector: holders: {holder}')
                             yield holder
 
             elif authors and tree_node_label == 'AUTHOR':
-                author = Detection.from_node(
+                if author := Detection.from_node(
                     node=tree_node,
                     type='authors',
                     ignores=non_authors_labels,
                     include_allrights=False,
                     refiner=refine_author,
                     junk=AUTHORS_JUNK,
-                )
-
-                if author:
+                ):
                     if TRACE: logger_debug(f'CopyrightDetector: detected authors: {author}')
                     yield author
 
@@ -348,12 +343,12 @@ def get_tokens(numbered_lines, splitter=re.compile('[\\t =;]+').split):
     """
     for start_line, line in numbered_lines:
         if TRACE_TOK:
-            logger_debug('  get_tokens: bare line: ' + repr(line))
+            logger_debug(f'  get_tokens: bare line: {repr(line)}')
 
         line = prepare_text_line(line)
 
         if TRACE_TOK:
-            logger_debug('  get_tokens: preped line: ' + repr(line))
+            logger_debug(f'  get_tokens: preped line: {repr(line)}')
 
         pos = 0
         for tok in splitter(line):
@@ -512,57 +507,29 @@ _YEAR_THEN_YEAR_SHORT = (r'(' +
 # TODO: this needs to be simplified:
 
 patterns = [
-    ############################################################################
-    # COPYRIGHT
-    ############################################################################
-
-    # first some exceptions
-
-    # NOT a copyright Copyright.txt : treat as NN
     (r'^Copyright\.txt$', 'NN'),
-
-    # when lowercase with trailing period. this is not a Copyright statement
     (r'^copyright\.\)?$', 'NN'),
-
-    # NOT a copyright symbol (ie. "copyrighted."): treat as NN
     (r'^Copyrighted[\.,]$', 'NN'),
     (r'^Copyrights[\.,]$', 'NN'),
     (r'^copyrighted[\.,]$', 'NN'),
     (r'^copyrights[\.,]$', 'NN'),
     (r'^COPYRIGHTS[\.,]$', 'NN'),
     (r'^COPYRIGHTED[\.,]$', 'NN'),
-
-    # copyright word or symbol
     (r'^[\(\.@_\-\#\):]*[Cc]opyrights?:?$', 'COPY'),
     (r'^[\(\.@_]*COPYRIGHT[sS]?:?$', 'COPY'),
     (r'^[\(\.@]*[Cc]opyrighted?:?$', 'COPY'),
     (r'^[\(\.@]*COPYRIGHTED?:?$', 'COPY'),
     (r'^[\(\.@]*CopyRights?:?$', 'COPY'),
-
-    # with a trailing comma
     (r'^Copyright,$', 'COPY'),
-
     (r'^\(C\)\,?$', 'COPY'),
     (r'^\(c\)\,?$', 'COPY'),
-
     (r'^COPR\.?$', 'COPY'),
     (r'^copr\.?$', 'COPY'),
     (r'^Copr\.?$', 'COPY'),
-
-    # copyright in markup, until we strip markup: apache'>Copyright
     (r'[A-Za-z0-9]+[\'">]+[Cc]opyright', 'COPY'),
-
-    # A copyright line in some manifest, meta or structured files such Windows PE
     (r'^AssemblyCopyright.?$', 'COPY'),
     (r'^AppCopyright?$', 'COPY'),
-
-    # SPDX-FileCopyrightText as defined by the FSFE Reuse project
     (r'^[Ss][Pp][Dd][Xx]-[Ff]ile[Cc]opyright[Tt]ext', 'COPY'),
-
-    ############################################################################
-    # ALL Rights Reserved.
-    ############################################################################
-    # All|Some|No Rights Reserved. should be a terminator/delimiter.
     (r'^All$', 'NN'),
     (r'^all$', 'NN'),
     (r'^ALL$', 'NN'),
@@ -576,27 +543,9 @@ patterns = [
     (r'^RESERVED[\.,]*$', 'RESERVED'),
     (r'^[Rr]eversed[\.,]*$', 'RESERVED'),
     (r'^REVERSED[\.,]*$', 'RESERVED'),
-
-    ############################################################################
-    # JUNK are things to ignore
-    ############################################################################
-
-    # Combo of many (3+) letters and punctuations groups without spaces is likely junk
-    # "AEO>>,o>>'!xeoI?o?O1/4thuA/"
-    # (r'((\w+\W+){3,})+', 'JUNK'),
-
-    # CamELCaseeXXX is typcally JUNK such as code variable names
-    # AzaAzaaaAz BBSDSB002923,
     (r'^([A-Z][a-z]+){3,20}[A-Z]+[0-9]*,?$', 'JUNK'),
-
-    # multiple parens (at least two (x) groups) is a sign of junk
-    # such as in (1)(ii)(OCT
     (r'^.*\(.*\).*\(.*\).*$', 'JUNK'),
-
-    # parens such as (1) or (a) is a sign of junk but of course NOT (c)
     (r'^\(([abdefghi\d]|ii|iii)\)$', 'JUNK'),
-
-    # found in crypto certificates and LDAP
     (r'^O=$', 'JUNK'),
     (r'^OU=?$', 'JUNK'),
     (r'^XML$', 'JUNK'),
@@ -607,7 +556,6 @@ patterns = [
     (r'^[Oo]riginally?$', 'JUNK'),
     (r'^[Rr]epresentations?\.?$', 'JUNK'),
     (r'^works,$', 'JUNK'),
-
     (r'^Refer$', 'JUNK'),
     (r'^Apt$', 'JUNK'),
     (r'^Agreement$', 'JUNK'),
@@ -666,15 +614,12 @@ patterns = [
     (r'^ISUPPER?$', 'JUNK'),
     (r'^ISLOWER$', 'JUNK'),
     (r'^AppPublisher$', 'JUNK'),
-
     (r'^DISCLAIMS?$', 'JUNK'),
     (r'^SPECIFICALLY$', 'JUNK'),
-
     (r'^IDENTIFICATION$', 'JUNK'),
     (r'^WARRANTIE?S?$', 'JUNK'),
     (r'^WARRANTS?$', 'JUNK'),
     (r'^WARRANTYS?$', 'JUNK'),
-
     (r'^hispagestyle$', 'JUNK'),
     (r'^Generic$', 'JUNK'),
     (r'^Change$', 'JUNK'),
@@ -686,7 +631,6 @@ patterns = [
     (r'^design$', 'JUNK'),
     (r'^Driver$', 'JUNK'),
     (r'^[Cc]ontribution\.?', 'JUNK'),
-
     (r'DeclareUnicodeCharacter$', 'JUNK'),
     (r'^Language-Team$', 'JUNK'),
     (r'^Last-Translator$', 'JUNK'),
@@ -697,8 +641,6 @@ patterns = [
     (r'^Generates?$', 'JUNK'),
     (r'^Thanks?$', 'JUNK'),
     (r'^therein$', 'JUNK'),
-
-    # various programming constructs
     (r'^var$', 'JUNK'),
     (r'^[Tt]his$', 'JUNK'),
     (r'^return$', 'JUNK'),
@@ -708,12 +650,8 @@ patterns = [
     (r'^file$', 'JUNK'),
     (r'^[Aa]sync$', 'JUNK'),
     (r'^Keyspan$', 'JUNK'),
-
-    # neither and nor conjunctions and some common licensing words are NOT part
-    # of a copyright statement
     (r'^neither$', 'JUNK'),
     (r'^nor$', 'JUNK'),
-
     (r'^providing$', 'JUNK'),
     (r'^Execute$', 'JUNK'),
     (r'^NOTICE[.,]*$', 'JUNK'),
@@ -765,8 +703,6 @@ patterns = [
     (r'^Record-keeping$', 'JUNK'),
     (r'^Privacy$', 'JUNK'),
     (r'^within$', 'JUNK'),
-
-    # various trailing words that are junk
     (r'^Copyleft$', 'JUNK'),
     (r'^LegalCopyright$', 'JUNK'),
     (r'^Distributed$', 'JUNK'),
@@ -814,30 +750,18 @@ patterns = [
     (r'^[Cc]ollectively$', 'JUNK'),
     (r'^following$', 'JUNK'),
     (r'^file\.$', 'JUNK'),
-    # version variables listed after Copyright variable in FFmpeg
     (r'^ExifVersion$', 'JUNK'),
     (r'^FlashpixVersion$', 'JUNK'),
     (r'^.+ArmsAndLegs$', 'JUNK'),
-
-    # junk when HOLDER(S): typically used in disclaimers instead
     (r'^HOLDER\(S\)$', 'JUNK'),
-
-    # some HTML tags
     (r'^width$', 'JUNK'),
-
-    # this trigger otherwise "copyright ownership. The ASF" in Apache license headers
     (r'^[Oo]wnership\.?$', 'JUNK'),
-
-    # exceptions to composed proper namess, mostly debian copyright/control tag-related
-    # FIXME: may be lowercase instead?
     (r'^Title:?$', 'JUNK'),
     (r'^Debianized-By:?$', 'JUNK'),
     (r'^Upstream-Maintainer:?$', 'JUNK'),
     (r'^Content', 'JUNK'),
     (r'^Upstream-Author:?$', 'JUNK'),
     (r'^Packaged-By:?$', 'JUNK'),
-
-    # Windows XP
     (r'^Windows$', 'JUNK'),
     (r'^XP$', 'JUNK'),
     (r'^SP1$', 'JUNK'),
@@ -845,28 +769,19 @@ patterns = [
     (r'^SP3$', 'JUNK'),
     (r'^SP4$', 'JUNK'),
     (r'^assembly$', 'JUNK'),
-
-    # various junk bits
     (r'^example\.com$', 'JUNK'),
     (r'^null$', 'JUNK'),
     (r'^:Licen[cs]e$', 'JUNK'),
     (r'^Agent\.?$', 'JUNK'),
     (r'^behalf$', 'JUNK'),
     (r'^[aA]nyone$', 'JUNK'),
-
-    # when uppercase this is likely part of some SQL statement
     (r'^FROM$', 'JUNK'),
     (r'^CREATE$', 'JUNK'),
     (r'^CURDIR$', 'JUNK'),
-    # found in sqlite
     (r'^\+0$', 'JUNK'),
     (r'^ToUpper$', 'JUNK'),
-
-    # Java
     (r'^.*Servlet,?$', 'JUNK'),
     (r'^class$', 'JUNK'),
-
-    # C/C++
     (r'^template$', 'JUNK'),
     (r'^struct$', 'JUNK'),
     (r'^typedef$', 'JUNK'),
@@ -877,14 +792,8 @@ patterns = [
     (r'^type_of$', 'JUNK'),
     (r'^begin$', 'JUNK'),
     (r'^end$', 'JUNK'),
-
-    # Some mixed case junk
     (r'^LastModified$', 'JUNK'),
-
-    # Some font names
     (r'^Lucida$', 'JUNK'),
-
-    # various trailing words that are junk
     (r'^CVS$', 'JUNK'),
     (r'^EN-IE$', 'JUNK'),
     (r'^Info$', 'JUNK'),
@@ -893,53 +802,23 @@ patterns = [
     (r'^EULA', 'JUNK'),
     (r'^Terms?[.,]?$', 'JUNK'),
     (r'^Non-Assertion$', 'JUNK'),
-
-    # this is not Copr.
     (r'^Coproduct,?[,\.]?$$', 'JUNK'),
-
-    # FIXME: may be these should be NNs?
     (r'^CONTRIBUTORS?[,\.]?$', 'JUNK'),
     (r'^OTHERS?[,\.]?$', 'JUNK'),
     (r'^Contributors?\:[,\.]?$', 'JUNK'),
     (r'^Version$', 'JUNK'),
-
-    # JUNK from binary
     (r'^x1b|1H$', 'JUNK'),
-
-    # JUNK as camel case with a single hump such as in "processingInfo"
     (r'^[a-z]{3,10}[A-Z][a-z]{3,10}$', 'JUNK'),
-
-    (r'^\$?Guid$', 'JUNK'), 
-    (r'^Small$', 'NN'), 
-
-    ############################################################################
-    # Nouns and proper Nouns
-    ############################################################################
-
-    # Various rare bits treated as NAME directly
+    (r'^\$?Guid$', 'JUNK'),
+    (r'^Small$', 'NN'),
     (r'^FSFE?[\.,]?$', 'NAME'),
     (r'^This_file_is_part_of_KDE$', 'NAME'),
-
-    # K.K. (a company suffix), needs special handling
     (r'^K.K.,?$', 'NAME'),
-
-    # MIT is problematic
-    # With a comma, always CAPS (MIT alone is too error prone to be always tagged as CAPS
     (r'^MIT,$', 'CAPS'),
     (r'^MIT\.?$', 'MIT'),
-    # MIT is common enough, but not with a trailing period.
     (r'^MIT$', 'NN'),
-
-    # ISC is always a company
     (r'^MIT$', 'COMP'),
-
-    # NOT A CAPS
-    # [YEAR] W3C® (MIT, ERCIM, Keio, Beihang)."
     (r'^YEAR', 'NN'),
-
-    # Various NN, exceptions to NNP or CAPS: note that some are open ended and
-    # do not end with a $
-
     (r'^Activation\.?$', 'NN'),
     (r'^Act[\.,]?$', 'NN'),
     (r'^Added$', 'NN'),
@@ -969,7 +848,6 @@ patterns = [
     (r'^Code$', 'NN'),
     (r'^Commercial', 'NN'),
     (r'^Commons$', 'NN'),
-    # TODO: Compilation could be JUNK?
     (r'^Compilation', 'NN'),
     (r'^Contact', 'NN'),
     (r'^Contracts?$', 'NN'),
@@ -1165,16 +1043,11 @@ patterns = [
     (r'^Create$', 'NN'),
     (r'^Engine\.$', 'NN'),
     (r'^While$', 'NN'),
-
-    # alone this is not enough for an NNP
     (r'^Free$', 'NN'),
-
-    # Hours/Date/Day/Month text references
     (r'^am$', 'NN'),
     (r'^pm$', 'NN'),
     (r'^AM$', 'NN'),
     (r'^PM$', 'NN'),
-
     (r'^January$', 'NN'),
     (r'^February$', 'NN'),
     (r'^March$', 'NN'),
@@ -1187,63 +1060,42 @@ patterns = [
     (r'^October$', 'NN'),
     (r'^November$', 'NN'),
     (r'^December$', 'NN'),
-
     (r'^Name[\.,]?$', 'NN'),
     (r'^Co-Author[\.,]?$', 'NN'),
     (r'^Author\'s$', 'NN'),
     (r'^Co-Author\'s$', 'NN'),
-    #  the Universal Copyright Convention (1971 Paris text).
     (r'^Convention[\.,]?$', 'NN'),
     (r'^Paris[\.,]?$', 'NN'),
-
-    # we do not include Jan and Jun that are common enough first names
     (r'^(Feb|Mar|Apr|May|Jul|Aug|Sep|Oct|Nov|Dec)$', 'NN'),
     (r'^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$', 'NN'),
     (r'^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$', 'NN'),
-
-    ############################################################################
-    # Proper Nouns
-    ############################################################################
-
-    # Title case word with a trailing parens is an NNP
     (r'^[A-Z][a-z]{3,}\)$', 'NNP'),
-
-    # names with a slash that are NNP
-    # Research/Unidata , LCS/Telegraphics.
-    (r'^('
-       r'[A-Z]'
-       r'([a-z]|[A-Z])+'
-       r'/'
-       r'[A-Z][a-z]+[\.,]?'
-     r')$', 'NNP'),
-
-    # communications
+    (r'^(' r'[A-Z]' r'([a-z]|[A-Z])+' r'/' r'[A-Z][a-z]+[\.,]?' r')$', 'NNP'),
     (r'communications', 'NNP'),
-
-    # Places: TODO: these are NOT NNPs but we treat them as such for now
-    (r'^\(?'
-     r'(?:Cambridge|Stockholm|Davis|Sweden[\)\.]?'
-     r'|Massachusetts'
-     r'|Oregon'
-     r'|California'
-     r'|Norway'
-     r'|UK'
-     r'|Berlin'
-     r'|CONCORD'
-     r'|Manchester'
-     r'|MASSACHUSETTS'
-     r'|Finland'
-     r'|Espoo'
-     r'|Munich'
-     r'|Germany'
-     r'|Italy'
-     r'|Spain'
-     r'|Europe'
-     r'|Lafayette'
-     r'|Indiana'
-     r')[\),\.]?$', 'NNP'),
-
-    # Misc corner case combos ?(mixed, NN or CAPS) that are NNP
+    (
+        r'^\(?'
+        r'(?:Cambridge|Stockholm|Davis|Sweden[\)\.]?'
+        r'|Massachusetts'
+        r'|Oregon'
+        r'|California'
+        r'|Norway'
+        r'|UK'
+        r'|Berlin'
+        r'|CONCORD'
+        r'|Manchester'
+        r'|MASSACHUSETTS'
+        r'|Finland'
+        r'|Espoo'
+        r'|Munich'
+        r'|Germany'
+        r'|Italy'
+        r'|Spain'
+        r'|Europe'
+        r'|Lafayette'
+        r'|Indiana'
+        r')[\),\.]?$',
+        'NNP',
+    ),
     (r'^Software,\',$', 'NNP'),
     (r'\(Royal$', 'NNP'),
     (r'PARADIGM$', 'NNP'),
@@ -1252,8 +1104,6 @@ patterns = [
     (r'UserTesting$', 'NNP'),
     (r'D\.T\.Shield\.?$', 'NNP'),
     (r'Antill\',$', 'NNP'),
-
-    # Corner cases of lowercased NNPs
     (r'^suzuki$', 'NNP'),
     (r'toshiya\.?$', 'NNP'),
     (r'leethomason$', 'NNP'),
@@ -1271,37 +1121,16 @@ patterns = [
     (r'werkstaetten\.?$', 'NNP'),
     (r'werken$', 'NNP'),
     (r'various\.?$', 'NNP'),
-
-    # treat Attributable as proper noun as it is seen in Author tags such as in:
-    # @author not attributable
     (r'^[Aa]ttributable$', 'NNP'),
-
-    # rarer caps
-    # EPFL-LRC/ICA
     (r'^[A-Z]{3,6}-[A-Z]{3,6}/[A-Z]{3,6}', 'NNP'),
-
-    ############################################################################
-    # Named entities: companies, groups, universities, etc
-    ############################################################################
-
-    # AT&T (the company), needs special handling
     (r'^AT\&T[\.,]?$', 'COMP'),
-
-    # company suffix name with  suffix Tech.,ltd
     (r'^[A-Z][a-z]+[\.,]+(LTD|LTd|LtD|Ltd|ltd|lTD|lTd|ltD).?,?$', 'COMP'),
-
-    # company suffix
     (r'^[Ii]nc[.]?[,\.]?\)?$', 'COMP'),
     (r'^Incorporated[,\.]?\)?$', 'COMP'),
-
-    # ,Inc. suffix without spaces is directly a company name
     (r'^.+,Inc\.$', 'COMPANY'),
-
     (r'^[Cc]ompany[,\.]?\)?$', 'COMP'),
     (r'^Limited[,\.]??$', 'COMP'),
     (r'^LIMITED[,\.]??$', 'COMP'),
-
-    # Caps company suffixes
     (r'^INC\.?,?\)?$', 'COMP'),
     (r'^INCORPORATED\.?,?\)?$', 'COMP'),
     (r'^CORP\.?,?\)?$', 'COMP'),
@@ -1311,8 +1140,6 @@ patterns = [
     (r'^COMPANY\.?,?$', 'COMP'),
     (r'^\(tm\).?$', 'COMP'),
     (r'^[Ff]orum\.?,?', 'COMP'),
-
-    # company suffix
     (r'^[Cc]orp\.?,?\)?$', 'COMP'),
     (r'^[Cc]orp(oration|\.,?)?\)?$', 'COMP'),
     (r'^[Cc][oO]\.,?$', 'COMP'),
@@ -1330,86 +1157,48 @@ patterns = [
     (r'^[Tt]eams?\.?$', 'COMP'),
     (r'^[Tt]ech\.?,?$', 'COMP'),
     (r"^Limited'?\.?,?$", 'COMP'),
-
-    # company suffix : LLC, LTD, LLP followed by one extra char
     (r'^[Ll][Tt][Dd]\.?,?$', 'COMP'),
     (r'^[Ll]\.?[Ll]\.?[CcPp]\.?,?$', 'COMP'),
     (r'^L\.P\.?$', 'COMP'),
     (r'^[Ss]ubsidiary$', 'COMP'),
     (r'^[Ss]ubsidiaries\.?$', 'COMP'),
     (r'^[Ss]ubsidiary\(\-ies\)\.?$', 'COMP'),
-
-    # company suffix : SA, SAS, AG, AB, AS, CO, labs followed by a dot
-    (r'^(S\.?A\.?S?|Sas|sas|A\/S|AG,?|AB|Labs?|[Cc][Oo]|Research|Center|INRIA|Societe)\.?$', 'COMP'),
-
-    # company suffix : AS: this is frequent beyond Norway.
+    (
+        r'^(S\.?A\.?S?|Sas|sas|A\/S|AG,?|AB|Labs?|[Cc][Oo]|Research|Center|INRIA|Societe)\.?$',
+        'COMP',
+    ),
     (r'^AS.$', 'COMP'),
     (r'^AS', 'CAPS'),
-
-    # (german) company suffix
     (r'^[Gg][Mm][Bb][Hh].?$', 'COMP'),
-    # ( e.V. german) company suffix
     (r'^[eV]\.[vV]\.?$', 'COMP'),
-    # (italian) company suffix
     (r'^[sS]\.[pP]\.[aA]\.?$', 'COMP'),
-    # sweedish company suffix : ASA followed by a dot
     (r'^ASA.?$', 'COMP'),
-    # czech company suffix: JetBrains s.r.o.
     (r'^s\.r\.o\.?$', 'COMP'),
-    # (Laboratory) company suffix
     (r'^(Labs?|Laboratory|Laboratories|Laboratoire)\.?,?$', 'COMP'),
-    # (dutch and belgian) company suffix
     (r'^[Bb]\.?[Vv]\.?|BVBA$', 'COMP'),
-    # university
     (r'^\(?[Uu]niv(?:[.]|ersit(?:y|e|at?|ad?))\)?\.?$', 'UNI'),
     (r'^UNIVERSITY$', 'UNI'),
     (r'^College$', 'UNI'),
-    # Academia/ie
     (r'^[Ac]cademi[ae]s?$', 'UNI'),
-
-    # institutes
     (r'INSTITUTE', 'COMP'),
     (r'^\(?[Ii]nstitut(s|o|os|e|es|et|a|at|as|u|i)?\)?$', 'COMP'),
-
-    # Facility
     (r'Facility', 'COMP'),
-
     (r'Tecnologia', 'COMP'),
-
-    # (danish) company suffix
     (r'^ApS|A\/S|IVS\.?,?$', 'COMP'),
-
-    # (finnsih) company suffix
     (r'^Abp\.?,?$', 'COMP'),
-
-    # "holders" is considered Special
     (r'^([Hh]olders?|HOLDERS?).?$', 'HOLDER'),
-
-    # affiliates or "and its affiliate(s)."
     (r'^[Aa]ffiliate(s|\(s\))?\.?$', 'NNP'),
-
-    # OU as in Org unit, found in some certficates
     (r'^OU$', 'OU'),
-
-    ############################################################################
-    # AUTHORS
-    ############################################################################
-
-    # "authors" or "contributors" is interesting, and so a tag of its own
     (r'^[Aa]uthor$', 'AUTH'),
     (r'^[Aa]uthors?\.$', 'AUTHDOT'),
     (r'^Authors$', 'AUTHS'),
     (r'^authors|author\'$', 'AUTHS'),
     (r'^[Aa]uthor\(s\)\.?$', 'AUTHS'),
     (r'^@author$', 'AUTH'),
-
     (r'^[Cc]ontribut(ors|ing)\.?$', 'CONTRIBUTORS'),
     (r'^contributors,$', 'CONTRIBUTORS'),
-
     (r'^Contributor[,.]?$', 'NN'),
     (r'^Licensor[,.]?$', 'NN'),
-
-    # same for developed, etc...
     (r'^[Cc]oded$', 'AUTH2'),
     (r'^[Rr]ecoded$', 'AUTH2'),
     (r'^[Mm]odified$', 'AUTH2'),
@@ -1417,41 +1206,23 @@ patterns = [
     (r'^[Ww]ritten$', 'AUTH2'),
     (r'^[Mm]aintained$', 'AUTH2'),
     (r'^[Dd]eveloped$', 'AUTH2'),
-
-    # commiters is interesting, and so a tag of its own
     (r'[Cc]ommitters\.??', 'COMMIT'),
-
-    # same for maintainers, developers, admins.
     (r'^[Aa]dmins?$', 'MAINT'),
     (r'^[Dd]evelopers?\.?$', 'MAINT'),
     (r'^[Mm]aintainers?\.?$', 'MAINT'),
     (r'^co-maintainers?$', 'MAINT'),
-
-    ############################################################################
-    # Conjunctions and related
-    ############################################################################
-
     (r'^OF$', 'OF'),
     (r'^of$', 'OF'),
     (r'^Of$', 'OF'),
-
-    # DE/de/di: OF:
-    # FIXME this conflicts with VAN??
     (r'^De$', 'OF'),
     (r'^DE$', 'OF'),
     (r'^Di$', 'OF'),
     (r'^di$', 'OF'),
-
-    # in
     (r'^in$', 'IN'),
     (r'^en$', 'IN'),
-
-    # by
     (r'^by$', 'BY'),
     (r'^BY$', 'BY'),
     (r'^By$', 'BY'),
-
-    # conjunction: and
     (r'^and$', 'CC'),
     (r'^And$', 'CC'),
     (r'^AND$', 'CC'),
@@ -1463,28 +1234,14 @@ patterns = [
     (r'^ET$', 'CC'),
     (r'^Und$', 'CC'),
     (r'^und$', 'CC'),
-
-    # solo comma as a conjunction
     (r'^,$', 'CC'),
-
-    # ie. in things like "Copyright (c) 2012 John Li and others"
-    # or et.al.
     (r'^[Oo]ther?s[\.,]?$', 'OTH'),
     (r'^et\. ?al[\.,]?$', 'OTH'),
-
-    # in year ranges: dash, or 'to': "1990-1995", "1990/1995" or "1990 to 1995"
     (r'^-$', 'DASH'),
     (r'^/$', 'DASH'),
-
     (r'^to$', 'TO'),
-
-    # Portions copyright .... are worth keeping
     (r'[Pp]ortions?|[Pp]arts?', 'PORTIONS'),
-
-    # in dutch/german names, like Marco van Basten, or Klemens von Metternich
-    # and Spanish/French Da Siva and De Gaulle
-        (r'^(([Vv][ao]n)|[Dd][aeu])$', 'VAN'),
-
+    (r'^(([Vv][ao]n)|[Dd][aeu])$', 'VAN'),
     (r'^van$', 'VAN'),
     (r'^Van$', 'VAN'),
     (r'^von$', 'VAN'),
@@ -1495,167 +1252,119 @@ patterns = [
     (r'^de$', 'VAN'),
     (r'^Du$', 'VAN'),
     (r'^du$', 'VAN'),
-
-    ############################################################################
-    # Years and Year ranges
-    ############################################################################
-
-    # rare cases of trailing + signon years
     (r'^20[0-1][0-9]\+$', 'YR-PLUS'),
-
-    # year or year ranges
-    # plain year with various leading and trailing punct
-    # dual or multi years 1994/1995. or 1994-1995
-    # 1987,88,89,90,91,92,93,94,95,96,98,99,2000,2001,2002,2003,2004,2006
-    # multi years
-    # dual years with second part abbreviated
-    # 1994/95. or 2002-04 or 1991-9
-    (r'^' + _PUNCT + _YEAR_OR_YEAR_YEAR_WITH_PUNCT + '+' +
-        '(' +
-            _YEAR_OR_YEAR_YEAR_WITH_PUNCT +
-        '|' +
-            _YEAR_THEN_YEAR_SHORT +
-        ')*' + '$', 'YR'),
-
-    (r'^' + _PUNCT + _YEAR_OR_YEAR_YEAR_WITH_PUNCT + '+' +
-        '(' +
-            _YEAR_OR_YEAR_YEAR_WITH_PUNCT +
-        '|' +
-            _YEAR_THEN_YEAR_SHORT +
-        '|' +
-            _YEAR_SHORT_PUNCT +
-        ')*' + '$', 'YR'),
-
-    (r'^(' + _YEAR_YEAR + ')+$', 'YR'),
-
-    # 88, 93, 94, 95, 96: this is a pattern mostly used in FSF copyrights
+    (
+        (
+            (
+                (
+                    (
+                        (
+                            (
+                                f'^{_PUNCT}{_YEAR_OR_YEAR_YEAR_WITH_PUNCT}+'
+                                + '('
+                            )
+                            + _YEAR_OR_YEAR_YEAR_WITH_PUNCT
+                        )
+                        + '|'
+                    )
+                    + _YEAR_THEN_YEAR_SHORT
+                )
+                + ')*'
+            )
+            + '$'
+        ),
+        'YR',
+    ),
+    (
+        (
+            (
+                (
+                    (
+                        (
+                            (
+                                (
+                                    (
+                                        f'^{_PUNCT}{_YEAR_OR_YEAR_YEAR_WITH_PUNCT}+'
+                                        + '('
+                                    )
+                                    + _YEAR_OR_YEAR_YEAR_WITH_PUNCT
+                                )
+                                + '|'
+                            )
+                            + _YEAR_THEN_YEAR_SHORT
+                        )
+                        + '|'
+                    )
+                    + _YEAR_SHORT_PUNCT
+                )
+                + ')*'
+            )
+            + '$'
+        ),
+        'YR',
+    ),
+    (f'^({_YEAR_YEAR})+$', 'YR'),
     (r'^[8-9][0-9],$', 'YR'),
-
-    # 80 to 99: this is a pattern mostly used in FSF copyrights
     (r'^[8-9][0-9]$', 'BARE-YR'),
-
-    # weird year
     (r'today.year', 'YR'),
     (r'^\$?LastChangedDate\$?$', 'YR'),
-
-    # Copyright templates in W3C documents
     (r'^\$?date-of-software$', 'YR'),
     (r'^\$?date-of-document$', 'YR'),
-
-    # cardinal numbers
     (r'^-?[0-9]+(.[0-9]+)?.?$', 'CD'),
-
-    ############################################################################
-    # All caps and proper nouns
-    ############################################################################
-
-    # composed proper nouns, ie. Jean-Claude or ST-Microelectronics
-    # FIXME: what about a variant with spaces around the dash?
     (r'^[A-Z][a-zA-Z]*\s?[\-]\s?[A-Z]?[a-zA-Z]+.?$', 'NNP'),
-
-    # Countries abbreviations
     (r'^U\.S\.A\.?$', 'NNP'),
-
-    # Dotted ALL CAPS initials
     (r'^([A-Z]\.){1,3}$', 'NNP'),
-
-    # misc corner cases such LaTeX3 Project and other
     (r'^LaTeX3$', 'NNP'),
     (r'^Meridian\'93$', 'NNP'),
     (r'^Xiph.Org$', 'NNP'),
     (r'^iClick,?$', 'NNP'),
-
-    # proper nouns with digits
     (r'^([A-Z][a-z0-9]+){1,2}\.?$', 'NNP'),
-
-    # saxon genitive, ie. Philippe's
     (r"^[A-Z][a-z]+[']s$", 'NNP'),
-
-    # Uppercase dotted name, ie. P. or DMTF.
     (r'^([A-Z]+\.)+$', 'PN'),
-
-    # proper noun with some separator and trailing comma
     (r'^[A-Z]+[.][A-Z][a-z]+[,]?$', 'NNP'),
-
-    # proper noun with apostrophe ': D'Orleans, D'Arcy, T'so, Ts'o
     (r"^[A-Z][[a-z]?['][A-Z]?[a-z]+[,.]?$", 'NNP'),
-
-    # proper noun with apostrophe ': d'Itri
     (r"^[a-z]['][A-Z]?[a-z]+[,\.]?$", 'NNP'),
-
-    # all CAPS word, at least 1 char long such as MIT, including an optional trailing comma or dot
     (r'^[A-Z0-9]+[,]?$', 'CAPS'),
-
-    # all caps word 3 chars and more, enclosed in parens
     (r'^\([A-Z0-9]{2,}\)$', 'CAPS'),
-
-    # all CAPS word, all letters including an optional trailing single quote
     (r"^[A-Z]{2,}\'?$", 'CAPS'),
-
-    # proper noun: first CAP, including optional trailing comma
-    # note: this also captures a bare comma as an NNP ... this is a bug
     (r'^([A-Z][a-zA-Z0-9]+){,2}\.?,?$', 'NNP'),
-
-    ############################################################################
-    # URLS and emails
-    ############################################################################
-
-     # email start-at-end: <sebastian.classen at freenet.ag>: <EMAIL_START> <AT> <EMAIL_END>
     (r'^<([a-zA-Z]+[a-zA-Z\.]){2,5}$', 'EMAIL_START'),
     (r'^[a-zA-Z\.]{2,5}>$', 'EMAIL_END'),
-
-    # a .sh shell scripts is NOT an email.
     (r'^.*\.sh\.?$', 'JUNK'),
-    # email eventually in parens or brackets with some trailing punct.
-    (r'^[\<\(]?[a-zA-Z0-9]+[a-zA-Z0-9\+_\-\.\%]*(@|at)[a-zA-Z0-9][a-zA-Z0-9\+_\-\.\%]+\.[a-zA-Z]{2,5}?[\>\)\.\,]*$', 'EMAIL'),
-
-    # URLS such as <(http://fedorahosted.org/lohit)> or ()
+    (
+        r'^[\<\(]?[a-zA-Z0-9]+[a-zA-Z0-9\+_\-\.\%]*(@|at)[a-zA-Z0-9][a-zA-Z0-9\+_\-\.\%]+\.[a-zA-Z]{2,5}?[\>\)\.\,]*$',
+        'EMAIL',
+    ),
     (r'[<\(]https?:.*[>\)]', 'URL'),
-    # URLS such as ibm.com without a scheme
-    (r'\s?[a-z0-9A-Z\-\.\_]+\.([Cc][Oo][Mm]|[Nn][Ee][Tt]|[Oo][Rr][Gg]|us|mil|io|edu|co\.[a-z][a-z]|eu|ch|fr|de|be|nl|au|biz)\s?\.?$', 'URL2'),
-    # TODO: add more extensions: there are so main TLD these days!
-    # URL wrapped in () or <>
-    (r'[\(<]+\s?[a-z0-9A-Z\-\.\_]+\.(com|net|org|us|mil|io|edu|co\.[a-z][a-z]|eu|ch|fr|jp|de|be|nl|au|biz)\s?[\.\)>]+$', 'URL'),
-    (r'<?a?.(href)?.\(?[a-z0-9A-Z\-\.\_]+\.(com|net|org|us|mil|io|edu|co\.[a-z][a-z]|eu|ch|fr|jp|de|be|nl|au|biz)[\.\)>]?$', 'URL'),
-    # derived from regex in cluecode.finder
-    (r'<?a?.(href)?.('
-     r'(?:http|ftp|sftp)s?://[^\s<>\[\]"]+'
-     r'|(?:www|ftp)\.[^\s<>\[\]"]+'
-     r')\.?>?', 'URL'),
-
+    (
+        r'\s?[a-z0-9A-Z\-\.\_]+\.([Cc][Oo][Mm]|[Nn][Ee][Tt]|[Oo][Rr][Gg]|us|mil|io|edu|co\.[a-z][a-z]|eu|ch|fr|de|be|nl|au|biz)\s?\.?$',
+        'URL2',
+    ),
+    (
+        r'[\(<]+\s?[a-z0-9A-Z\-\.\_]+\.(com|net|org|us|mil|io|edu|co\.[a-z][a-z]|eu|ch|fr|jp|de|be|nl|au|biz)\s?[\.\)>]+$',
+        'URL',
+    ),
+    (
+        r'<?a?.(href)?.\(?[a-z0-9A-Z\-\.\_]+\.(com|net|org|us|mil|io|edu|co\.[a-z][a-z]|eu|ch|fr|jp|de|be|nl|au|biz)[\.\)>]?$',
+        'URL',
+    ),
+    (
+        r'<?a?.(href)?.('
+        r'(?:http|ftp|sftp)s?://[^\s<>\[\]"]+'
+        r'|(?:www|ftp)\.[^\s<>\[\]"]+'
+        r')\.?>?',
+        'URL',
+    ),
     (r'^\(?<?https?://[a-zA-Z0-9_\-]+(\.([a-zA-Z0-9_\-])+)+.?\)?>?$', 'URL'),
-
-    # URLS with trailing/ such as http://fedorahosted.org/lohit/
-    # URLS with leading( such as (http://qbnz.com/highlighter/
     (r'\(?https?:.*/', 'URL'),
-
-    ############################################################################
-    # Misc
-    ############################################################################
-
-    # .\" is not a noun
     (r'^\.\\\?"?$', 'JUNK'),
-
-    # Mixed cap nouns (rare) LeGrande
     (r'^[A-Z][a-z]+[A-Z][a-z]+[\.\,]?$', 'MIXEDCAP'),
-
-    # Code variable names including snake case
     (r'^.*(_.*)+$', 'JUNK'),
-
-    # !$?
     (r'^\!\$\?$', 'JUNK'),
-
-    # things composed only of non-word letters (e.g. junk punctuations)
-    # but keeping _ ? and () as parts of words
     (r'^[^\w\?()]{2,10}$', 'JUNK'),
-
-    ############################################################################
-    # catch all other as Nouns
-    ############################################################################
-
-    # nouns (default)
     (r'.+', 'NN'),
 ]
+
 
 # Comments in the Grammar are lines that start with #
 # End of line commenst are rules descriptions.
@@ -2554,7 +2263,7 @@ def refine_copyright(c):
     c = remove_same_extra_words(c)
     c = ' '.join(c.split())
     c = remove_dupe_copyright_words(c)
-    c = strip_prefixes(c, prefixes=set(['by', 'c']))
+    c = strip_prefixes(c, prefixes={'by', 'c'})
     c = c.strip()
     c = c.strip('+')
     c = strip_balanced_edge_parens(c)
@@ -2789,25 +2498,28 @@ COPYRIGHTS_JUNK = frozenset([
 # AUTHORS CLEANUPS
 ################################################################################
 
-AUTHORS_PREFIXES = frozenset(set.union(
-    set(PREFIXES),
-    set([
-        'contributor',
-        'contributors',
-        'contributor(s)',
-        'authors',
-        'author',
-        'author:',
-        'author(s)',
-        'authored',
-        'created',
-        'author.',
-        'author\'',
-        'authors,',
-        'authorship',
-        'or',
-    ])
-))
+AUTHORS_PREFIXES = frozenset(
+    set.union(
+        set(PREFIXES),
+        {
+            'contributor',
+            'contributors',
+            'contributor(s)',
+            'authors',
+            'author',
+            'author:',
+            'author(s)',
+            'authored',
+            'created',
+            'author.',
+            'author\'',
+            'authors,',
+            'authorship',
+            'or',
+        },
+    )
+)
+
 
 # Set of authors that get detected and are junk/false positive
 # note: this must be lowercase and be kept to a minimum.
@@ -2835,39 +2547,41 @@ AUTHORS_JUNK = frozenset([
 # HOLDERS CLEANUPS
 ################################################################################
 
-HOLDERS_PREFIXES = frozenset(set.union(
-    set(PREFIXES),
-    set([
-        '-',
-        'a',
-        '<a',
-        'href',
-        'ou',
-        'portions',
-        'portion',
-        'notice',
-        'holders',
-        'holder',
-        'property',
-        'parts',
-        'part',
-        'at',
-        'cppyright',
-        'assemblycopyright',
-        'c',
-        'works',
-        'present',
-        'at',
-        'right',
-        'rights',
-        'reserved',
-        'held',
-        'by',
-        'is',
-    ])
-))
+HOLDERS_PREFIXES = frozenset(
+    set.union(
+        set(PREFIXES),
+        {
+            '-',
+            'a',
+            '<a',
+            'href',
+            'ou',
+            'portions',
+            'portion',
+            'notice',
+            'holders',
+            'holder',
+            'property',
+            'parts',
+            'part',
+            'cppyright',
+            'assemblycopyright',
+            'c',
+            'works',
+            'present',
+            'at',
+            'right',
+            'rights',
+            'reserved',
+            'held',
+            'by',
+            'is',
+        },
+    )
+)
 
-HOLDERS_PREFIXES_WITH_ALL = HOLDERS_PREFIXES.union(set(['all']))
+
+HOLDERS_PREFIXES_WITH_ALL = HOLDERS_PREFIXES.union({'all'})
 
 HOLDERS_SUFFIXES = frozenset([
     'http',
@@ -3041,7 +2755,7 @@ def fix_trailing_space_dot(s):
     Return a string stripped from some leading and trailing punctuations.
     """
     if s and s.endswith(' .'):
-        s = s[:-2] + '.'
+        s = f'{s[:-2]}.'
     return s
 
 
@@ -3091,7 +2805,7 @@ def strip_unbalanced_parens(s, parens='()'):
     ' '
     """
     start, end = parens
-    if not start in s and not end in s:
+    if start not in s and end not in s:
         return s
 
     unbalanced = []
@@ -3111,7 +2825,7 @@ def strip_unbalanced_parens(s, parens='()'):
                 unbalanced_append((i, c,))
 
     unbalanced.extend(stack)
-    pos_to_del = set([i for i, c in unbalanced])
+    pos_to_del = {i for i, c in unbalanced}
     cleaned = [c if i not in pos_to_del else ' ' for i, c in enumerate(s)]
     return type(s)('').join(cleaned)
 
@@ -3188,9 +2902,6 @@ def is_candidate(prepared_line):
 
     if copyrights_hint.years(prepared_line):
         return True
-    else:
-        pass
-
     for marker in copyrights_hint.statement_markers:
         if marker in prepared_line:
             return True

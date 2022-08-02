@@ -148,10 +148,7 @@ def all_rule_tokens():
     Return a set of tuples of tokens, one corresponding to every existing and
     added rules. Used to avoid duplicates.
     """
-    rule_tokens = set()
-    for rule in models.get_rules():
-        rule_tokens.add(tuple(rule.tokens()))
-    return rule_tokens
+    return {tuple(rule.tokens()) for rule in models.get_rules()}
 
 
 def find_rule_base_loc(license_expression):
@@ -205,8 +202,7 @@ def cli(licenses_file):
 
     print()
     for rule in skinny_rules:
-        existing = rule_exists(rule.text())
-        if existing:
+        if existing := rule_exists(rule.text()):
             print('Skipping existing rule:', existing, 'with text:\n', rule.text()[:50].strip(), '...')
             continue
 
@@ -226,8 +222,8 @@ def cli(licenses_file):
 
         rulerec = models.Rule(**rd)
 
-        rulerec.data_file = base_loc + '.yml'
-        rulerec.text_file = base_loc + '.RULE'
+        rulerec.data_file = f'{base_loc}.yml'
+        rulerec.text_file = f'{base_loc}.RULE'
 
         rule_tokens = tuple(rulerec.tokens())
 
@@ -237,7 +233,12 @@ def cli(licenses_file):
             rules_tokens.add(rule_tokens)
             models.update_ignorables(rulerec, verbose=False)
             rulerec.dump()
-            print('Rule added:', 'file://' + rulerec.data_file, '\n', 'file://' + rulerec.text_file,)
+            print(
+                'Rule added:',
+                f'file://{rulerec.data_file}',
+                '\n',
+                f'file://{rulerec.text_file}',
+            )
 
 
 if __name__ == '__main__':

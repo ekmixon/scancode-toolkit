@@ -43,8 +43,7 @@ def parse_webpage(url, page_no):
     that webpage.
     """
     page = urlopen(url + page_no)
-    parsed_page = BeautifulSoup(page, 'html.parser')
-    return parsed_page
+    return BeautifulSoup(page, 'html.parser')
 
 
 def extract_openhub_licenses(start_pg, end_pg, write_to_file,

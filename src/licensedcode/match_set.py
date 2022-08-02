@@ -126,11 +126,7 @@ def multisets_intersector(qmset, imset):
     # NOTE: Using a Counter is less efficient
     intersection = defaultdict(int)
     # iterate the smallest of the two sets
-    if len(qmset) < len(imset):
-        set1, set2 = qmset, imset
-    else:
-        set1, set2 = imset, qmset
-
+    set1, set2 = (qmset, imset) if len(qmset) < len(imset) else (imset, qmset)
     for key, s1count in set1.items():
         s2count = set2[key]
         intersection[key] = min(s1count, s2count)
@@ -292,8 +288,11 @@ def compute_candidates(query_run, idx, matchable_rids, top=50,
 
         if scores_vectors:
             svr, svf = scores_vectors
-            if (not high_resemblance
-            or (high_resemblance and svr.is_highly_resemblant and svf.is_highly_resemblant)):
+            if (
+                not high_resemblance
+                or svr.is_highly_resemblant
+                and svf.is_highly_resemblant
+            ):
                 sortable_candidates_append((scores_vectors, rid, rule, high_set_intersection))
 
     if not sortable_candidates:
@@ -316,11 +315,7 @@ def compute_candidates(query_run, idx, matchable_rids, top=50,
     sortable_candidates = []
     sortable_candidates_append = sortable_candidates.append
 
-    if _use_bigrams:
-        filter_non_matching = False
-    else:
-        filter_non_matching = True
-
+    filter_non_matching = not _use_bigrams
     msets_by_rid = idx.msets_by_rid
 
     high_intersection_filter = partial(high_multiset_subset, _use_bigrams=_use_bigrams)
@@ -341,8 +336,11 @@ def compute_candidates(query_run, idx, matchable_rids, top=50,
 
         if scores_vectors:
             svr, svf = scores_vectors
-            if (not high_resemblance
-            or (high_resemblance and svr.is_highly_resemblant and svf.is_highly_resemblant)):
+            if (
+                not high_resemblance
+                or svr.is_highly_resemblant
+                and svf.is_highly_resemblant
+            ):
                 # note: we keep the high_set_intersection of sets from step1,
                 # not multisets from this step2
                 sortable_candidates_append((scores_vectors, rid, rule, high_set_intersection))
@@ -356,10 +354,16 @@ def compute_candidates(query_run, idx, matchable_rids, top=50,
     if TRACE_CANDIDATES_MSET and candidates:
         logger_debug('\n\n\ncompute_candidates: FINAL: sortable_candidates:', len(candidates))
         # CSV-like printout
-        print(','.join(
-            ['rank', 'rule'] +
-            [x + '_rounded' for x in ScoresVector._fields] +
-            list(ScoresVector._fields)))
+        print(
+            ','.join(
+                (
+                    ['rank', 'rule']
+                    + [f'{x}_rounded' for x in ScoresVector._fields]
+                )
+                + list(ScoresVector._fields)
+            )
+        )
+
 
         for rank, ((score_vec1, score_vec2), rid, rule, high_set_intersection) in enumerate(candidates, 1):
             print(','.join(str(x) for x in ([rank, rule.identifier] + list(score_vec1) + list(score_vec2))))

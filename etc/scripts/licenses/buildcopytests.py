@@ -31,12 +31,11 @@ def load_data(location='00-new-copyright-tests.txt'):
         data = [l.strip() for l in o.read().splitlines(False)]
     lines = []
     for line in data:
-        if not line:
-            if lines:
-                yield '\n'.join(lines)
-                lines = []
-        else:
+        if line:
             lines.append(line)
+        elif lines:
+            yield '\n'.join(lines)
+            lines = []
     if lines:
         yield '\n'.join(lines)
 
@@ -104,13 +103,13 @@ def cli(copyrights_file):
         holders = []
         authors = []
         for dtype, value, _start, _end in detect_copyrights([text]):
-            if dtype == 'copyrights':
+            if dtype == 'authors':
+                authors.append(value)
+
+            elif dtype == 'copyrights':
                 copyrights.append(value)
             elif dtype == 'holders':
                 holders.append(value)
-            elif dtype == 'authors':
-                authors.append(value)
-
         test = CopyrightTest(
             what=['holders', 'copyrights', 'authors'],
             copyrights=copyrights,
@@ -118,7 +117,7 @@ def cli(copyrights_file):
             authors=authors,
         )
         test.test_file = test_file_loc
-        test.data_file = test_file_loc + '.yml'
+        test.data_file = f'{test_file_loc}.yml'
         test.dump()
         existing.add(text)
         print('Copyright Test added:', text)

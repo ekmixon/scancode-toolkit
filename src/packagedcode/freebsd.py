@@ -63,15 +63,10 @@ def compute_normalized_license(declared_license):
         return
 
     license_logic = declared_license.get('licenselogic')
-    relation = 'AND'
-    if license_logic:
-        if license_logic == 'or' or license_logic == 'dual':
-            relation = 'OR'
-
+    relation = 'OR' if license_logic and license_logic in ['or', 'dual'] else 'AND'
     detected_licenses = []
     for declared in licenses:
-        detected_license = models.compute_normalized_license(declared)
-        if detected_license:
+        if detected_license := models.compute_normalized_license(declared):
             detected_licenses.append(detected_license)
 
     if detected_licenses:
@@ -122,11 +117,10 @@ def build_package(package_data):
 
     for source, target in plain_fields:
         value = package_data.get(source)
+        if value and isinstance(value, str):
+            value = value.strip()
         if value:
-            if isinstance(value, str):
-                value = value.strip()
-            if value:
-                setattr(package, target, value)
+            setattr(package, target, value)
 
     # mapping of top level +COMPACT_MANIFEST items to a function accepting as
     # arguments the package.json element value and returning an iterable of key,
@@ -139,8 +133,7 @@ def build_package(package_data):
 
     for source, func in field_mappers:
         logger.debug('parse: %(source)r, %(func)r' % locals())
-        value = package_data.get(source) or None
-        if value:
+        if value := package_data.get(source) or None:
             func(value, package)
 
     # license_mapper needs multiple fields
@@ -159,9 +152,8 @@ def license_mapper(package_data, package):
     if not licenses:
         return
 
-    declared_license = {}
     lics = [l.strip() for l in licenses if l and l.strip()]
-    declared_license['licenses'] = lics
+    declared_license = {'licenses': lics}
     if license_logic:
         declared_license['licenselogic'] = license_logic
 
@@ -184,7 +176,7 @@ def origin_mapper(origin, package):
     """
     # the 'origin' field allows us to craft a code_view_url
     package.qualifiers['origin'] = origin
-    package.code_view_url = 'https://svnweb.freebsd.org/ports/head/{}'.format(origin)
+    package.code_view_url = f'https://svnweb.freebsd.org/ports/head/{origin}'
 
 
 def arch_mapper(arch, package):
@@ -194,5 +186,6 @@ def arch_mapper(arch, package):
     # the 'arch' field allows us to craft a binary download_url
     # FIXME: due to the rolling-release nature of binary ports, some download URLs
     # will lead to 404 errors if a newer release of a particular port is availible
-    package.download_url = 'https://pkg.freebsd.org/{}/latest/All/{}-{}.txz'.format(arch, package.name, package.version)
+    package.download_url = f'https://pkg.freebsd.org/{arch}/latest/All/{package.name}-{package.version}.txz'
+
     return package

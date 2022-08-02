@@ -24,7 +24,7 @@ def run_pypi_smoke_tests(pypi_archive):
     """
     # archive is either a wheel or an sdist as in
     # scancode_toolkit-21.1.21-py3-none-any.whl or scancode-toolkit-21.1.21.tar.gz
-    run_command(['pip', 'install', pypi_archive + '[full]'])
+    run_command(['pip', 'install', f'{pypi_archive}[full]'])
 
     with open('some.file', 'w') as sf:
         sf.write('license: gpl-2.0')

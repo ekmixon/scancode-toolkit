@@ -164,10 +164,8 @@ def uninteresting_emails_filter(matches):
     uninteresting emails have been removed.
     """
     for key, email, line, line_number in matches:
-        good_email = finder_data.classify_email(email)
-        if not good_email:
-            continue
-        yield key, email, line, line_number
+        if good_email := finder_data.classify_email(email):
+            yield key, email, line, line_number
 
 # TODO: consider: http://www.regexguru.com/2008/11/detecting-urls-in-a-block-of-text/
 # TODO: consider: http://blog.codinghorror.com/the-problem-with-urls/
@@ -194,7 +192,7 @@ def urls_regex():
     , re.UNICODE | re.VERBOSE | re.IGNORECASE)
 
 
-INVALID_URLS_PATTERN = '((?:' + schemes + ')://([$%*/_])+)'
+INVALID_URLS_PATTERN = f'((?:{schemes})://([$%*/_])+)'
 
 
 def find_urls(location, unique=True):
@@ -232,7 +230,7 @@ def find_urls(location, unique=True):
         yield str(url), line_number
 
 
-EMPTY_URLS = set(['https', 'http', 'ftp', 'www', ])
+EMPTY_URLS = {'https', 'http', 'ftp', 'www'}
 
 
 def empty_urls_filter(matches):
@@ -384,8 +382,6 @@ def canonical_url(uri):
     except Exception as e:
         if TRACE:
             logger_debug('canonical_url: failed for:', uri, 'with:', repr(e))
-        # ignore it
-        pass
 
 
 def canonical_url_cleaner(matches):
@@ -440,8 +436,7 @@ def get_ip(s):
         return False
 
     try:
-        ip = ipaddress.ip_address(str(s))
-        return ip
+        return ipaddress.ip_address(str(s))
     except ValueError:
         return False
 
@@ -480,20 +475,11 @@ def is_good_host(host):
     if not host:
         return False
 
-    ip = get_ip(host)
-    if ip:
-        if is_private_ip(ip):
-            return False
-        return finder_data.classify_ip(host)
-
+    if ip := get_ip(host):
+        return False if is_private_ip(ip) else finder_data.classify_ip(host)
     # at this stage we have a host name, not an IP
 
-    if '.' not in host:
-        # private hostnames not in a domain, including localhost
-        return False
-
-    good_host = finder_data.classify_host(host)
-    return good_host
+    return False if '.' not in host else finder_data.classify_host(host)
 
 
 def url_host_domain(url):

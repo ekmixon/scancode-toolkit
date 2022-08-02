@@ -116,7 +116,7 @@ def write_templated(output_file, results, version, template_loc):
             output_file.write(template_chunk)
         except Exception:
             import traceback
-            msg = 'ERROR: Failed to write output for: ' + repr(template_chunk)
+            msg = f'ERROR: Failed to write output for: {repr(template_chunk)}'
             msg += '\n' + traceback.format_exc()
             raise Exception(msg)
 
@@ -164,13 +164,16 @@ def generate_output(results, version, template):
         path = scanned_file['path']
         results = []
         if COPYRIGHTS in scanned_file:
-            for entry in scanned_file[COPYRIGHTS]:
-                results.append({
+            results.extend(
+                {
                     'start': entry['start_line'],
                     'end': entry['end_line'],
                     'what': 'copyright',
                     'value': entry['value'],
-                })
+                }
+                for entry in scanned_file[COPYRIGHTS]
+            )
+
         if LICENSES in scanned_file:
             for entry in scanned_file[LICENSES]:
                 # make copy
@@ -195,11 +198,11 @@ def generate_output(results, version, template):
         # should rather just pass a the list of files from the scan
         # results and let the template handle this rather than
         # denormalizing the list here??
-        converted_infos[path] = {}
-        for name, value in scanned_file.items():
-            if name in (LICENSES, PACKAGES, COPYRIGHTS, EMAILS, URLS):
-                continue
-            converted_infos[path][name] = value
+        converted_infos[path] = {
+            name: value
+            for name, value in scanned_file.items()
+            if name not in (LICENSES, PACKAGES, COPYRIGHTS, EMAILS, URLS)
+        }
 
         if PACKAGES in scanned_file:
             converted_packages[path] = scanned_file[PACKAGES]
@@ -253,7 +256,7 @@ def is_stdout(output_file):
     return output_file.name == '<stdout>'
 
 
-def create_html_app(output_file, results, version, scanned_path):  # NOQA
+def create_html_app(output_file, results, version, scanned_path):    # NOQA
     """
     Given an html-app output_file, generate that file, create the data.js data
     file from the results and create the corresponding `_files` directory and
@@ -274,7 +277,7 @@ def create_html_app(output_file, results, version, scanned_path):  # NOQA
         # a `_files` suffix Return empty strings if output is to stdout.
         output_location = output_file.name
         tgt_root_path = dirname(output_location)
-        tgt_assets_dir = file_base_name(output_location) + '_files'
+        tgt_assets_dir = f'{file_base_name(output_location)}_files'
 
         # delete old assets
         target_assets_dir = join(tgt_root_path, tgt_assets_dir)

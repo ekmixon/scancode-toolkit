@@ -47,21 +47,23 @@ data_dir = join(abspath(dirname(__file__)), 'data')
 licenses_data_dir = join(data_dir, 'licenses')
 rules_data_dir = join(data_dir, 'rules')
 
-FOSS_CATEGORIES = set([
+FOSS_CATEGORIES = {
     'Copyleft',
     'Copyleft Limited',
     'Patent License',
     'Permissive',
     'Public Domain',
-])
+}
 
-OTHER_CATEGORIES = set([
+
+OTHER_CATEGORIES = {
     'Commercial',
     'Proprietary Free',
     'Free Restricted',
     'Source-available',
     'Unstated License',
-])
+}
+
 
 CATEGORIES = FOSS_CATEGORIES | OTHER_CATEGORIES
 
@@ -165,11 +167,7 @@ class License(object):
                 f'Cannot relocate {self.key} License to its current directory.'
             )
 
-        if new_key:
-            key = new_key
-        else:
-            key = self.key
-
+        key = new_key or self.key
         newl = License(key=key, src_dir=target_dir)
 
         # copy fields
@@ -220,9 +218,7 @@ class License(object):
             if attr.name == 'language' and value == 'en':
                 return False
 
-            if attr.name == 'minimum_coverage' and value == 100:
-                return False
-            return True
+            return attr.name != 'minimum_coverage' or value != 100
 
         data = attr.asdict(self, filter=dict_fields, dict_factory=dict)
         cv = data.get('minimum_coverage', 0)
@@ -295,8 +291,7 @@ class License(object):
         """
         if self.spdx_license_key:
             yield self.spdx_license_key
-        for key in self.other_spdx_license_keys:
-            yield key
+        yield from self.other_spdx_license_keys
 
     @staticmethod
     def validate(licenses, verbose=False, no_dupe_urls=False):
@@ -361,28 +356,26 @@ class License(object):
                     if lic.homepage_url == lic.osi_url:
                         warn('Homepage URL same as osi_url')
 
-                if lic.osi_url or lic.faq_url:
-                    if lic.osi_url == lic.faq_url:
-                        warn('osi_url same as faq_url')
+                if (lic.osi_url or lic.faq_url) and lic.osi_url == lic.faq_url:
+                    warn('osi_url same as faq_url')
 
                 all_licenses = lic.text_urls + lic.other_urls
                 for url in lic.osi_url, lic.faq_url, lic.homepage_url:
                     if url:
                         all_licenses.append(url)
 
-                if not len(all_licenses) == len(set(all_licenses)):
+                if len(all_licenses) != len(set(all_licenses)):
                     warn('Some duplicated URLs')
 
             # local text consistency
             text = lic.text
 
-            license_qtokens = tuple(index_tokenizer(text))
-            if not license_qtokens:
-                info('No license text')
-            else:
+            if license_qtokens := tuple(index_tokenizer(text)):
                 # for global dedupe
                 by_text[license_qtokens].append(f'{key}: TEXT')
 
+            else:
+                info('No license text')
             # SPDX consistency
             if lic.spdx_license_key:
                 by_spdx_key[lic.spdx_license_key].append(key)
@@ -392,20 +385,15 @@ class License(object):
             for oslk in lic.other_spdx_license_keys:
                 by_spdx_key[oslk].append(key)
 
-        # global SPDX consistency
-        multiple_spdx_keys_used = {
-            k: v for k, v in by_spdx_key.items()
-            if len(v) > 1
-        }
-        if multiple_spdx_keys_used:
+        if multiple_spdx_keys_used := {
+            k: v for k, v in by_spdx_key.items() if len(v) > 1
+        }:
             for k, lkeys in multiple_spdx_keys_used.items():
                 errors['GLOBAL'].append(
                     f'SPDX key: {k} used in multiple licenses: ' +
                     ', '.join(sorted(lkeys)))
 
-        # global text dedupe
-        multiple_texts = {k: v for k, v in by_text.items() if len(v) > 1}
-        if multiple_texts:
+        if multiple_texts := {k: v for k, v in by_text.items() if len(v) > 1}:
             for k, msgs in multiple_texts.items():
                 errors['GLOBAL'].append(
                     'Duplicate texts in multiple licenses: ' +
@@ -481,8 +469,7 @@ def load_licenses(licenses_data_dir=licenses_data_dir , with_deprecated=False):
                 continue
             licenses[key] = lic
 
-    dangling = all_files.difference(used_files)
-    if dangling:
+    if dangling := all_files.difference(used_files):
         msg = (
             f'Some License files are orphaned in {licenses_data_dir!r}.\n' +
             '\n'.join(f'file://{f}' for f in sorted(dangling))
@@ -541,22 +528,21 @@ def validate_rules(rules, licenses_by_key, with_text=False):
     of ``rules`` Rule integrity and correctness using known licenses from a
     mapping of ``licenses_by_key`` {key: License}`.
     """
-    errors = _validate_all_rules(rules, licenses_by_key)
-    if errors:
-        message = ['Errors while validating rules:']
-        for msg, rules in errors.items():
-            message.append('')
-            message.append(msg)
-            for rule in rules:
-                message.append(f'  {rule!r}')
-                if rule.text_file:
-                    message.append(f'    file://{rule.text_file}')
-                if rule.data_file:
-                    message.append(f'    file://{rule.data_file}')
-                if with_text:
-                    txt = rule.text()[:50].strip()
-                    message.append(f'       {txt}...')
-        raise InvalidRule('\n'.join(message))
+    if not (errors := _validate_all_rules(rules, licenses_by_key)):
+        return
+    message = ['Errors while validating rules:']
+    for msg, rules in errors.items():
+        message.extend(('', msg))
+        for rule in rules:
+            message.append(f'  {rule!r}')
+            if rule.text_file:
+                message.append(f'    file://{rule.text_file}')
+            if rule.data_file:
+                message.append(f'    file://{rule.data_file}')
+            if with_text:
+                txt = rule.text()[:50].strip()
+                message.append(f'       {txt}...')
+    raise InvalidRule('\n'.join(message))
 
 
 def build_rules_from_licenses(licenses):
@@ -595,8 +581,7 @@ def get_all_spdx_keys(licenses_db):
     mapping of {key: License} objects.
     """
     for lic in licenses_db.values():
-        for spdx_key in lic.spdx_keys():
-            yield spdx_key
+        yield from lic.spdx_keys()
 
 
 def get_essential_spdx_tokens():
@@ -615,12 +600,9 @@ def get_all_spdx_key_tokens(licenses_db):
     Yield SPDX token strings collected from a ``licenses_db`` mapping of {key:
     License} objects.
     """
-    for tok in get_essential_spdx_tokens():
-        yield tok
-
+    yield from get_essential_spdx_tokens()
     for spdx_key in get_all_spdx_keys(licenses_db):
-        for token in index_tokenizer(spdx_key):
-            yield token
+        yield from index_tokenizer(spdx_key)
 
 
 def load_rules(rules_data_dir=rules_data_dir):
@@ -642,8 +624,7 @@ def load_rules(rules_data_dir=rules_data_dir):
                 space_problems.append(data_file)
             rule_file = join(rules_data_dir, f'{base_name}.RULE')
             try:
-                rule = Rule(data_file=data_file, text_file=rule_file)
-                yield rule
+                yield Rule(data_file=data_file, text_file=rule_file)
             except Exception as re:
                 model_errors.append(str(re))
             # accumulate sets to ensures we do not have illegal names or extra
@@ -931,22 +912,23 @@ class BasicRule(object):
 
             if not license_expression:
                 yield 'Missing license_expression.'
-            else:
-                if licensing:
-                    try:
-                        licensing.parse(license_expression, validate=True, simple=True)
-                    except InvalidRule as e:
-                        yield f'Failed to parse and validate license_expression: {e}'
+            elif licensing:
+                try:
+                    licensing.parse(license_expression, validate=True, simple=True)
+                except InvalidRule as e:
+                    yield f'Failed to parse and validate license_expression: {e}'
 
     def license_keys(self, unique=True):
         """
         Return a list of license keys for this rule.
         """
-        if not self.license_expression:
-            return []
-        return self.licensing.license_keys(
-            self.license_expression_object,
-            unique=unique,
+        return (
+            self.licensing.license_keys(
+                self.license_expression_object,
+                unique=unique,
+            )
+            if self.license_expression
+            else []
         )
 
     def same_licensing(self, other):
@@ -1013,8 +995,7 @@ class BasicRule(object):
         )
 
         for flag in flags:
-            tag_value = getattr(self, flag, False)
-            if tag_value:
+            if tag_value := getattr(self, flag, False):
                 data[flag] = tag_value
 
         if self.has_stored_relevance and self.relevance and not is_false_positive:
@@ -1039,8 +1020,7 @@ class BasicRule(object):
             )
 
             for igno in ignorables:
-                tag_value = getattr(self, igno, False)
-                if tag_value:
+                if tag_value := getattr(self, igno, False):
                     data[igno] = tag_value
 
         return data
@@ -1074,9 +1054,7 @@ def check_is_list_of_strings(l):
     Return True if `l` is a list of strings or an empty list, False otherwise.
     """
     if isinstance(l, list):
-        if l:
-            return all(isinstance(i, str) for i in l)
-        return True
+        return all(isinstance(i, str) for i in l) if l else True
     return False
 
 
@@ -1108,15 +1086,14 @@ class Rule(BasicRule):
         """
         Load data from data file. Check presence of text file.
         """
-        if not self.text_file:
-            # for SPDX or tests only
-            if not self.stored_text :
-                raise InvalidRule(
-                    f'Invalid rule without its corresponding text file: {self}')
-            self.identifier = '_tst_' + str(len(self.stored_text))
-        else:
+        if self.text_file:
             self.identifier = file_name(self.text_file)
 
+        elif not self.stored_text:
+            raise InvalidRule(
+                f'Invalid rule without its corresponding text file: {self}')
+        else:
+            self.identifier = f'_tst_{len(self.stored_text)}'
         if self.data_file:
             try:
                 self.load()
@@ -1219,8 +1196,7 @@ class Rule(BasicRule):
 
         known_attributes = set(attr.fields_dict(self.__class__))
         data_file_attributes = set(data)
-        unknown_attributes = data_file_attributes.difference(known_attributes)
-        if unknown_attributes:
+        if unknown_attributes := data_file_attributes.difference(known_attributes):
             unknown_attributes = ', '.join(sorted(unknown_attributes))
             msg = 'License rule {} data file has unknown attributes: {}'
             raise InvalidRule(msg.format(self, unknown_attributes))
@@ -1229,9 +1205,7 @@ class Rule(BasicRule):
 
         self.is_false_positive = data.get('is_false_positive', False)
 
-        relevance = as_int(float(data.get('relevance') or 0))
-        # Keep track if we have a stored relevance of not.
-        if relevance:
+        if relevance := as_int(float(data.get('relevance') or 0)):
             self.relevance = relevance
             self.has_stored_relevance = True
         else:
@@ -1257,9 +1231,7 @@ class Rule(BasicRule):
 
         self.referenced_filenames = data.get('referenced_filenames', []) or []
 
-        # these are purely informational and not used at run time
-        notes = data.get('notes')
-        if notes:
+        if notes := data.get('notes'):
             self.notes = notes.strip()
 
         self.ignorable_copyrights = data.get('ignorable_copyrights', [])
@@ -1553,19 +1525,19 @@ def get_ignorables(text_file, verbose=False):
         if verbose:
             print(f'  Found {dtype}: {value}')
 
-        if dtype == 'copyrights':
+        if dtype == 'authors':
+            authors.add(value)
+
+        elif dtype == 'copyrights':
             copyrights.add(value)
         elif dtype == 'holders':
             holders.add(value)
-        elif dtype == 'authors':
-            authors.add(value)
-
     # collect and set ignorable emails and urls
-    urls = set(u for (u, _ln) in find_urls(text_file) if u)
+    urls = {u for (u, _ln) in find_urls(text_file) if u}
     if verbose:
         print(f'  Found urls: {urls}')
 
-    emails = set(e for (e, _ln) in find_emails(text_file) if e)
+    emails = {e for (e, _ln) in find_emails(text_file) if e}
     if verbose:
         print(f'  Found emails: {emails}')
 

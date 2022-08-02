@@ -34,9 +34,7 @@ class GoModule(object):
     exclude = attr.ib(default=None)
 
     def purl(self, include_version=True):
-        version = None
-        if include_version:
-            version = self.version
+        version = self.version if include_version else None
         return PackageURL(
                     type='golang',
                     namespace=self.namespace,

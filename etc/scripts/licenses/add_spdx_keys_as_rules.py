@@ -33,14 +33,14 @@ def is_matched(text, license_key):
         return False
 
     if len(matches) != 1:
-        click.echo('Multiple matches for ' + text)
+        click.echo(f'Multiple matches for {text}')
         for match in matches:
             click.echo(repr(match))
         return False
 
     match = matches[0]
 
-    click.echo('One match for ' + text)
+    click.echo(f'One match for {text}')
     click.echo(repr(match))
 
     matched_key = match.rule.license_expression
@@ -54,9 +54,9 @@ def add_rule(spdx_text, license_obj):
     """
     Add a new rule with text `spdx_text` for the `license_obj` License.
     """
-    rule_base_name = 'spdx_license_id_' + spdx_text.lower() + '_for_' + license_obj.key
-    text_file = os.path.join(rules_data_dir, rule_base_name + '.RULE')
-    data_file = os.path.join(rules_data_dir, rule_base_name + '.yml')
+    rule_base_name = f'spdx_license_id_{spdx_text.lower()}_for_{license_obj.key}'
+    text_file = os.path.join(rules_data_dir, f'{rule_base_name}.RULE')
+    data_file = os.path.join(rules_data_dir, f'{rule_base_name}.yml')
     if os.path.exists(text_file) or os.path.exists(data_file):
         raise Exception('Cannot create new SPDX rules text file for {text}. '
                         'File already exists at: {text_file}'.format(**locals()))
@@ -73,11 +73,11 @@ def add_rule(spdx_text, license_obj):
     )
     rule.data_file = data_file
     rule.dump()
-    click.echo('Added new rule: ' + repr(rule))
+    click.echo(f'Added new rule: {repr(rule)}')
 
 
 # these key would create too many false positives if added. We ignore these
-very_common_ids = set([
+very_common_ids = {
     'aal',
     'abstyles',
     'adsl',
@@ -135,8 +135,7 @@ very_common_ids = set([
     'makeindex',
     'miros',
     'mit',
-    'mpich2'
-    'mtll',
+    'mpich2' 'mtll',
     'multics',
     'mup',
     'naumen',
@@ -190,7 +189,7 @@ very_common_ids = set([
     'zed',
     'zend-2.0',
     'zlib',
-])
+}
 
 
 @click.command()
@@ -219,7 +218,7 @@ def add_spdx_key_rules():
         unmatched_licenses[spdx_key] = license_obj
 
     click.echo('')
-    click.echo('{} SPDX ids not matched.'.format(len(unmatched_licenses)))
+    click.echo(f'{len(unmatched_licenses)} SPDX ids not matched.')
 
     # then create all rules at once
     for spdx_key, license_obj in sorted(unmatched_licenses.items()):

@@ -93,7 +93,7 @@ class LicenseCache:
                 # work around some rare Windows quirks
                 import traceback
                 print('Inconsistent License cache: checking and rebuilding index.')
-                print(str(e))
+                print(e)
                 print(traceback.format_exc())
 
         from licensedcode.models import licenses_data_dir as ldd
@@ -217,9 +217,7 @@ def build_spdx_symbols(licenses_db=None):
         symbol = LicenseSymbolLike(lic)
         if lic.spdx_license_key:
             slk = lic.spdx_license_key.lower()
-            existing = symbols_by_spdx_key.get(slk)
-
-            if existing:
+            if existing := symbols_by_spdx_key.get(slk):
                 raise ValueError(
                     'Duplicated SPDX license key: %(slk)r defined in '
                     '%(lic)r and %(existing)r' % locals())
@@ -230,9 +228,7 @@ def build_spdx_symbols(licenses_db=None):
             if not (other_spdx and other_spdx.strip()):
                 continue
             slk = other_spdx.lower()
-            existing = symbols_by_spdx_key.get(slk)
-
-            if existing:
+            if existing := symbols_by_spdx_key.get(slk):
                 raise ValueError(
                     'Duplicated "other" SPDX license key: %(slk)r defined '
                     'in %(lic)r and %(existing)r' % locals())

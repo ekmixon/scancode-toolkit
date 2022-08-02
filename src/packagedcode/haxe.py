@@ -147,7 +147,9 @@ def build_package(package_data):
             type=models.party_person,
             name=contrib,
             role='contributor',
-            url='https://lib.haxe.org/u/{}'.format(contrib))
+            url=f'https://lib.haxe.org/u/{contrib}',
+        )
+
         package.parties.append(party)
 
     for dep_name, dep_version in package_data.get('dependencies', {}).items():

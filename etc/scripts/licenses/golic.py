@@ -47,7 +47,7 @@ def collect_tests(location):
                 expected_lic, _, _ = line.partition(' ')
                 expected_lic = expected_lic.strip()
 
-        test = Test(
+        yield Test(
             location=loc,
             filename=filename,
             coverage=coverage,
@@ -55,8 +55,6 @@ def collect_tests(location):
             text=text,
             notes='\n'.join(c.strip() for c in comments),
         )
-
-        yield test
 
 
 def collect_url_tests(location):
@@ -103,7 +101,7 @@ def generate_license_tests(location):
 
     # map their keys to ours
     license_mapping = {spdx: l.key for spdx, l in get_spdx_symbols().items()}
-    license_mapping.update(extra_license_keys)
+    license_mapping |= extra_license_keys
 
     for test in list(collect_tests(location)) + list(collect_url_tests(location)):
         loc = test.location
@@ -119,7 +117,7 @@ def generate_license_tests(location):
         lickey = lickey or 'unknown'
 
         url = f'https://raw.githubusercontent.com/google/licensecheck/v0.3.1/testdata/{test.filename}'
-        with open(loc + '.yml', 'w') as td:
+        with open(f'{loc}.yml', 'w') as td:
             data = dict(
                 license_expressions=[lickey],
                 notes=(

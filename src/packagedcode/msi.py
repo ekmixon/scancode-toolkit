@@ -114,9 +114,8 @@ def get_version_from_subject_line(subject_line):
     the version number of the package contained in the MSI installer.
     """
     for pattern in VERSION_PATTERNS_REGEX():
-        version = re.search(pattern, subject_line)
-        if version:
-            v = version.group(0)
+        if version := re.search(pattern, subject_line):
+            v = version[0]
             # prefix with v space
             if not v.lower().startswith('v'):
                 v = f'v {v}'

@@ -43,8 +43,7 @@ def get_etag_md5(url):
     """
     headers = utils_thirdparty.get_remote_headers(url)
     headers = {k.lower(): v for k, v in headers.items()}
-    etag = headers .get('etag')
-    if etag:
+    if etag := headers.get('etag'):
         etag = etag.strip('"').lower()
         return etag
 

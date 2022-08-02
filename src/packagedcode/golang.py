@@ -58,44 +58,43 @@ class GolangPackage(models.Package):
 
     def repository_homepage_url(self, baseurl=default_web_baseurl):
         if self.namespace and self.name:
-            return '{}/{}/{}'.format(baseurl, self.namespace, self.name)
+            return f'{baseurl}/{self.namespace}/{self.name}'
 
 
 def build_gomod_package(gomods):
     """
     Return a Package object from a go.mod file or None.
     """
-    package_dependencies = []
     require = gomods.require or []
-    for gomod in require:
-        package_dependencies.append(
-            models.DependentPackage(
-                purl=gomod.purl(include_version=True),
-                requirement=gomod.version,
-                scope='require',
-                is_runtime=True,
-                is_optional=False,
-                is_resolved=False,
-            )
+    package_dependencies = [
+        models.DependentPackage(
+            purl=gomod.purl(include_version=True),
+            requirement=gomod.version,
+            scope='require',
+            is_runtime=True,
+            is_optional=False,
+            is_resolved=False,
         )
+        for gomod in require
+    ]
 
     exclude = gomods.exclude or []
-    for gomod in exclude:
-        package_dependencies.append(
-            models.DependentPackage(
-                purl=gomod.purl(include_version=True),
-                requirement=gomod.version,
-                scope='exclude',
-                is_runtime=True,
-                is_optional=False,
-                is_resolved=False,
-            )
+    package_dependencies.extend(
+        models.DependentPackage(
+            purl=gomod.purl(include_version=True),
+            requirement=gomod.version,
+            scope='exclude',
+            is_runtime=True,
+            is_optional=False,
+            is_resolved=False,
         )
+        for gomod in exclude
+    )
 
     name = gomods.name
     namespace = gomods.namespace
-    homepage_url = 'https://pkg.go.dev/{}/{}'.format(gomods.namespace, gomods.name)
-    vcs_url = 'https://{}/{}.git'.format(gomods.namespace, gomods.name)
+    homepage_url = f'https://pkg.go.dev/{gomods.namespace}/{gomods.name}'
+    vcs_url = f'https://{gomods.namespace}/{gomods.name}.git'
 
     return GolangPackage(
         name=name,
@@ -110,17 +109,16 @@ def build_gosum_package(gosums):
     """
     Return a Package object from a go.sum file.
     """
-    package_dependencies = []
-    for gosum in gosums:
-        package_dependencies.append(
-            models.DependentPackage(
-                purl=gosum.purl(),
-                requirement=gosum.version,
-                scope='dependency',
-                is_runtime=True,
-                is_optional=False,
-                is_resolved=True,
-            )
+    package_dependencies = [
+        models.DependentPackage(
+            purl=gosum.purl(),
+            requirement=gosum.version,
+            scope='dependency',
+            is_runtime=True,
+            is_optional=False,
+            is_resolved=True,
         )
+        for gosum in gosums
+    ]
 
     return GolangPackage(dependencies=package_dependencies)

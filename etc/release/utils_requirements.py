@@ -40,12 +40,9 @@ def get_required_name_versions(requirement_lines, force_pinned=True):
             continue
         if '==' not in req_line and force_pinned:
             raise Exception(f'Requirement version is not pinned: {req_line}')
-            name = req_line
-            version = None
-        else:
-            name, _, version = req_line.partition('==')
-            name = name.lower().strip()
-            version = version.lower().strip()
+        name, _, version = req_line.partition('==')
+        name = name.lower().strip()
+        version = version.lower().strip()
         yield name, version
 
 

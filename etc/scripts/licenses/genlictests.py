@@ -38,17 +38,14 @@ def build_test(test_file):
     idx = cache.get_index()
     matches = idx.match(location=test_file) or []
     detected_expressions = [match.rule.license_expression for match in matches]
-    notes = ''
-    if not detected_expressions:
-        notes = 'No license should be detected'
-
+    notes = '' if detected_expressions else 'No license should be detected'
     lt = LicenseTest(
         test_file=test_file,
         license_expressions=detected_expressions,
         notes=notes
     )
 
-    lt.data_file = test_file + '.yml'
+    lt.data_file = f'{test_file}.yml'
     return lt
 
 

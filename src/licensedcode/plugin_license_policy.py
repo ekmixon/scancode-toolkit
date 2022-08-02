@@ -63,7 +63,7 @@ class LicensePolicy(PostScanPlugin):
                 continue
 
             try:
-                resource_license_keys = set([entry.get('key') for entry in resource.licenses])
+                resource_license_keys = {entry.get('key') for entry in resource.licenses}
 
             except AttributeError:
                 # add license_policy regardless if there is license info or not
@@ -94,7 +94,7 @@ def has_policy_duplicates(license_policy_location):
     for policy in policies:
         license_key = policy.get('license_key')
 
-        if license_key in unique_policies.keys():
+        if license_key in unique_policies:
             return True
         else:
             unique_policies[license_key] = policy

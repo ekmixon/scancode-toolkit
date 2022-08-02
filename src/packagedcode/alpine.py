@@ -61,8 +61,7 @@ def get_installed_packages(root_dir, **kwargs):
     installed_file_loc = path.join(root_dir, 'lib/apk/db/installed')
     if not path.exists(installed_file_loc):
         return
-    for package in parse_alpine_installed_db(installed_file_loc):
-        yield package
+    yield from parse_alpine_installed_db(installed_file_loc)
 
 
 def parse_alpine_installed_db(location):
@@ -110,35 +109,30 @@ def is_apkbuild(location):
 
 # these variables need to be resolved or else this is a parsing error
 # we also only use these variables
-APKBUILD_VARIABLES = set([
+APKBUILD_VARIABLES = {
     'pkgname',
     'pkgver',
     'pkgrel',
     'pkgdesc',
     'license',
-    'url'
-    'arch',
-    # 'subpackages',
-    # depends
-    # 'depend',
-    # makedepends
+    'url' 'arch',
     'source',
     'sha512sums',
     'sha256sums',
     'md5sums',
-])
+}
 
-ESSENTIAL_APKBUILD_VARIABLES = set([
+
+ESSENTIAL_APKBUILD_VARIABLES = {
     'pkgname',
     'pkgver',
     'license',
-    'url'
-    'arch',
+    'url' 'arch',
     'source',
     'sha512sums',
     'sha256sums',
     'md5sums',
-])
+}
 
 
 def parse_apkbuild(location, strict=False):
@@ -310,10 +304,7 @@ def fix_kde_version(text, *args):
     esac
     """
     version = extract_pkgver(text)
-    if '.90' in version:
-        rel = 'unstable'
-    else:
-        rel = 'stable'
+    rel = 'unstable' if '.90' in version else 'stable'
     return f'_rel={rel} #fixed by scancode\n\n{text}'
 
 
@@ -709,23 +700,19 @@ def build_package(package_fields):
     # the expected normalized format
     converted_fields = {}
     for name, value in package_fields:
-        handler = package_handlers_by_field_name.get(name)
-        if handler:
+        if handler := package_handlers_by_field_name.get(name):
             try:
                 converted = handler(value, all_fields=all_fields, **converted_fields)
             except:
                 raise Exception(*list(package_fields))
 
-            # for extra data we update the existing
-            extra_data = converted.pop('extra_data', {}) or {}
-            if extra_data:
-                existing_extra_data = converted_fields.get('extra_data')
-                if existing_extra_data:
+            if extra_data := converted.pop('extra_data', {}) or {}:
+                if existing_extra_data := converted_fields.get('extra_data'):
                     existing_extra_data.update(extra_data)
                 else:
                     converted_fields['extra_data'] = dict(extra_data)
 
-            converted_fields.update(converted)
+            converted_fields |= converted
 
     return AlpinePackage.create(**converted_fields)
 
@@ -913,7 +900,7 @@ def c_git_commit_handler(value, **kwargs):
     """
     Return a git VCS URL from a package commit.
     """
-    return {f'vcs_url': f'git+http://git.alpinelinux.org/aports/commit/?id={value}'}
+    return {'vcs_url': f'git+http://git.alpinelinux.org/aports/commit/?id={value}'}
 
 
 def A_arch_handler(value, **kwargs):
@@ -988,7 +975,7 @@ def get_checksum_entries(value):
         entry = entry.strip()
         if not entry:
             continue
-        if not '  ' in entry:
+        if '  ' not in entry:
             raise Exception(f'Invalid APKBUILD checksums format: {value!r}')
         checksum, _, file_name = entry.partition('  ')
         checksum = checksum.strip()
@@ -1034,9 +1021,7 @@ def get_source_entries(source):
             continue
 
         has_url = any(scheme in entry for scheme in schemes)
-        is_url = entry.startswith(schemes)
-
-        if is_url:
+        if is_url := entry.startswith(schemes):
             url = entry
             file_name = None
         elif '::' in entry and has_url:
@@ -1053,9 +1038,10 @@ def source_handler(value, **kwargs):
     """
     Return a Package extra data mapping as a list of sources entry mappings.
     """
-    sources = []
-    for fn, url in get_source_entries(value):
-        sources.append(dict(file_name=fn, url=url))
+    sources = [
+        dict(file_name=fn, url=url) for fn, url in get_source_entries(value)
+    ]
+
     return {'extra_data': {'sources': sources}}
 
 
@@ -1282,7 +1268,7 @@ def normalize_and_cleanup_declared_license(declared):
     # space-separated as in apache-2.0 gpl-3.0-or-later lgpl-3.0-or-later
         expression_keywords = '(', ')', ' or ', ' and ', ' with '
         lowered = declared.lower()
-        if not any(s in lowered for s in expression_keywords):
+        if all(s not in lowered for s in expression_keywords):
             space_separated = declared.split()
             declared = combine_expressions(space_separated, unique=False)
     return declared
@@ -1584,10 +1570,7 @@ if __name__ == '__main__':
             line = '\t'.join(['declared_license', 'purl', 'distro', 'unique']) + '\n'
             output.write(line)
             for declared, packages in sorted(collect_licenses_from_index(locin).items()):
-                if len(packages) == 1:
-                    unique = 'yes'
-                else:
-                    unique = 'no'
+                unique = 'yes' if len(packages) == 1 else 'no'
                 pidx, purl = packages[0]
                 line = '\t'.join([declared, purl, pidx, unique]) + '\n'
                 output.write(line)
@@ -1624,10 +1607,7 @@ if __name__ == '__main__':
             line = '\t'.join(['declared', 'purl', 'distro', 'unique']) + '\n'
             output.write(line)
             for declared, packages in sorted(collect_licenses_from_apkbuilds(locin).items()):
-                if len(packages) == 1:
-                    unique = 'yes'
-                else:
-                    unique = 'no'
+                unique = 'yes' if len(packages) == 1 else 'no'
                 pidx, purl = packages[0]
                 line = '\t'.join([declared, purl, pidx, unique]) + '\n'
                 output.write(line)

@@ -52,15 +52,15 @@ class RustCargoCrate(models.Package):
 
     def repository_homepage_url(self, baseurl=default_web_baseurl):
         if self.name:
-            return '{}/crates/{}'.format(baseurl, self.name)
+            return f'{baseurl}/crates/{self.name}'
 
     def repository_download_url(self, baseurl=default_download_baseurl):
         if self.name and self.version:
-            return '{}/crates/{}/{}/download'.format(baseurl, self.name, self.version)
+            return f'{baseurl}/crates/{self.name}/{self.version}/download'
 
     def api_data_url(self, baseurl=default_api_baseurl):
         if self.name:
-            return '{}/crates/{}'.format(baseurl, self.name)
+            return f'{baseurl}/crates/{self.name}'
 
 
 def parse(location):
@@ -69,8 +69,7 @@ def parse(location):
     """
     handlers = {'cargo.toml': build_cargo_toml_package, 'cargo.lock': build_cargo_lock_package}
     filename = filetype.is_file(location) and fileutils.file_name(location).lower()
-    handler = handlers.get(filename)
-    if handler:
+    if handler := handlers.get(filename):
         return handler and handler(toml.load(location, _dict=dict))
 
 
@@ -91,15 +90,13 @@ def build_cargo_toml_package(package_data):
 
     declared_license = core_package_data.get('license')
 
-    package = RustCargoCrate(
+    return RustCargoCrate(
         name=name,
         version=version,
         description=description,
         parties=parties,
-        declared_license=declared_license
+        declared_license=declared_license,
     )
-
-    return package
 
 
 def party_mapper(party, party_role):
@@ -166,22 +163,19 @@ def build_cargo_lock_package(package_data):
     Return a Package object from a Cargo.lock package data mapping or None.
     """
 
-    package_dependencies = []
     core_package_data = package_data.get('package', [])
-    for dep in core_package_data:
-        package_dependencies.append(
-            models.DependentPackage(
-                purl=PackageURL(
-                    type='crates',
-                    name=dep.get('name'),
-                    version=dep.get('version')
-                ).to_string(),
-                requirement=dep.get('version'),
-                scope='dependency',
-                is_runtime=True,
-                is_optional=False,
-                is_resolved=True,
-            )
+    package_dependencies = [
+        models.DependentPackage(
+            purl=PackageURL(
+                type='crates', name=dep.get('name'), version=dep.get('version')
+            ).to_string(),
+            requirement=dep.get('version'),
+            scope='dependency',
+            is_runtime=True,
+            is_optional=False,
+            is_resolved=True,
         )
-    
+        for dep in core_package_data
+    ]
+
     return RustCargoCrate(dependencies=package_dependencies)

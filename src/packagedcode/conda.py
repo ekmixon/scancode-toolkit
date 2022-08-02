@@ -57,18 +57,16 @@ class CondaPackage(models.Package):
 
     @classmethod
     def get_package_root(cls, manifest_resource, codebase):
-        if manifest_resource.name.lower().endswith(('.yaml', '.yml')):
-            # the root is either the parent or further up for yaml stored under
-            # a INFO dir
-            path = 'info/recipe.tar-extract/recipe/meta.yaml'
-            if manifest_resource.path.endswith(path):
-                for ancestor in manifest_resource.ancestors(codebase):
-                    if ancestor.name == 'info':
-                        root_dir = ancestor.parent(codebase)
-                        return root_dir
-            return manifest_resource.parent(codebase)
-        else:
+        if not manifest_resource.name.lower().endswith(('.yaml', '.yml')):
             return manifest_resource
+        # the root is either the parent or further up for yaml stored under
+        # a INFO dir
+        path = 'info/recipe.tar-extract/recipe/meta.yaml'
+        if manifest_resource.path.endswith(path):
+            for ancestor in manifest_resource.ancestors(codebase):
+                if ancestor.name == 'info':
+                    return ancestor.parent(codebase)
+        return manifest_resource.parent(codebase)
 
     @classmethod
     def extra_root_dirs(cls):
@@ -100,9 +98,7 @@ def build_package(package_data):
     name = None
     version = None
 
-    # Handle the package element
-    package_element = package_data.get('package')
-    if package_element:
+    if package_element := package_data.get('package'):
         for key, value in package_element.items():
             if key == 'name':
                 name = value
@@ -116,18 +112,14 @@ def build_package(package_data):
         version=version or None,
     )
 
-    # Handle the source element
-    source_element = package_data.get('source')
-    if source_element:
+    if source_element := package_data.get('source'):
         for key, value in source_element.items():
             if key == 'url' and value:
                 package.download_url = value
             elif key == 'sha256' and value:
                 package.sha256 = value
 
-    # Handle the about element
-    about_element = package_data.get('about')
-    if about_element:
+    if about_element := package_data.get('about'):
         for key, value in about_element.items():
             if key == 'home' and value:
                 package.homepage_url = value
@@ -138,9 +130,7 @@ def build_package(package_data):
             elif key == 'dev_url' and value:
                 package.vcs_url = value
 
-    # Handle the about element
-    requirements_element = package_data.get('requirements')
-    if requirements_element:
+    if requirements_element := package_data.get('requirements'):
         for key, value in requirements_element.items():
             # Run element format is like:
             # (u'run', [u'mccortex ==1.0', u'nextflow ==19.01.0', u'cortexpy ==0.45.7', u'kallisto ==0.44.0', u'bwa', u'pandas', u'progressbar2', u'python >=3.6'])])

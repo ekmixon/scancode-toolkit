@@ -112,23 +112,21 @@ def build_query(
     """
     Return a Query built from location or query string given an index.
     """
-    if location:
-        T = typecode.get_type(location)
-        # TODO: implement additional type-driven heuristics for query chunking.
-        if not T.contains_text:
-            return
-        if T.is_binary:
-            # for binaries we want to avoid a large number of query runs as the
-            # license context is often very sparse or absent
-            qry = Query(location=location, idx=idx, line_threshold=bin_line_threshold)
-        else:
-            # for text
-            qry = Query(location=location, idx=idx, line_threshold=text_line_threshold)
-    else:
+    if not location:
         # a string is always considered text
-        qry = Query(query_string=query_string, idx=idx)
+        return Query(query_string=query_string, idx=idx)
 
-    return qry
+    T = typecode.get_type(location)
+    # TODO: implement additional type-driven heuristics for query chunking.
+    if not T.contains_text:
+        return
+    return (
+        Query(location=location, idx=idx, line_threshold=bin_line_threshold)
+        if T.is_binary
+        else Query(
+            location=location, idx=idx, line_threshold=text_line_threshold
+        )
+    )
 
 
 class Query(object):
@@ -373,16 +371,40 @@ class Query(object):
             for line_num, line in qlines:
                 logger_debug(' ', line_num, ':', line)
 
+        # keep track of tokens in a line
+        line_tokens = []
+        line_tokens_append = line_tokens.append
         for line_num, line in qlines:
-            # keep track of tokens in a line
-            line_tokens = []
-            line_tokens_append = line_tokens.append
             line_first_known_pos = None
 
             for token in query_tokenizer(line):
                 tid = dic_get(token)
                 is_stopword = token in STOPWORDS
-                if tid is not None and not is_stopword:
+                if tid is None and not is_stopword and not started:
+                    # If we have not yet started globally, then all tokens
+                    # seen so far are unknowns and we keep a count of them
+                    # in the magic "-1" position.
+                    self_unknowns_by_pos[-1] += 1
+                elif tid is None and not is_stopword:
+                    # here we have a new unknwon token positioned right after
+                    # the current known_pos
+                    self_unknowns_by_pos[known_pos] += 1
+                    unknowns_pos_add(known_pos)
+
+                elif tid is None or is_stopword:
+                    if not started:
+                        # If we have not yet started globally, then all tokens
+                        # seen so far are stopwords and we keep a count of them
+                        # in the magic "-1" position.
+                        self_stopwords_by_pos[-1] += 1
+                    else:
+                        # here we have a new unknwon token positioned right after
+                        # the current known_pos
+                        self_stopwords_by_pos[known_pos] += 1
+                        stopwords_pos_add(known_pos)
+                    # we do not track stopwords, only their position
+                    continue
+                else:
                     # this is a known token
                     known_pos += 1
                     started = True
@@ -391,33 +413,6 @@ class Query(object):
                         self_shorts_and_digits_pos_add(known_pos)
                     if line_first_known_pos is None:
                         line_first_known_pos = known_pos
-                else:
-                    # process STOPWORDS and unknown words
-                    if is_stopword:
-                        if not started:
-                            # If we have not yet started globally, then all tokens
-                            # seen so far are stopwords and we keep a count of them
-                            # in the magic "-1" position.
-                            self_stopwords_by_pos[-1] += 1
-                        else:
-                            # here we have a new unknwon token positioned right after
-                            # the current known_pos
-                            self_stopwords_by_pos[known_pos] += 1
-                            stopwords_pos_add(known_pos)
-                        # we do not track stopwords, only their position
-                        continue
-                    else:
-                        if not started:
-                            # If we have not yet started globally, then all tokens
-                            # seen so far are unknowns and we keep a count of them
-                            # in the magic "-1" position.
-                            self_unknowns_by_pos[-1] += 1
-                        else:
-                            # here we have a new unknwon token positioned right after
-                            # the current known_pos
-                            self_unknowns_by_pos[known_pos] += 1
-                            unknowns_pos_add(known_pos)
-
                 line_tokens_append(tid)
 
             # last known token position in the current line
@@ -439,10 +434,10 @@ class Query(object):
             if spdx_start_offset is not None:
                 # keep the line, start/end known pos for SPDX matching
                 spdx_prefix, spdx_expression = split_spdx_lid(line)
-                spdx_text = ' '.join([spdx_prefix or '', spdx_expression])
                 spdx_start_known_pos = line_first_known_pos + spdx_start_offset
 
                 if spdx_start_known_pos <= line_last_known_pos:
+                    spdx_text = ' '.join([spdx_prefix or '', spdx_expression])
                     self.spdx_lines.append((spdx_text, spdx_start_known_pos, line_last_known_pos))
 
             yield line_tokens
@@ -533,7 +528,10 @@ class Query(object):
 
             line_has_known_tokens = False
             line_has_good_tokens = False
-            line_is_all_digit = all([tid is None or tid in digit_only_tids for tid in tokens])
+            line_is_all_digit = all(
+                tid is None or tid in digit_only_tids for tid in tokens
+            )
+
 
             for token_id in tokens:
                 if token_id is not None:
@@ -559,9 +557,10 @@ class Query(object):
                 empty_lines += 1
 
         # append final run if any
-        if len(query_run) > 0:
-            if not all(tid in digit_only_tids for tid in query_run.tokens):
-                query_runs_append(query_run)
+        if len(query_run) > 0 and any(
+            tid not in digit_only_tids for tid in query_run.tokens
+        ):
+            query_runs_append(query_run)
 
         if TRACE_QR:
             print()
@@ -605,7 +604,7 @@ def break_on_boundaries(query_run):
             positions = deque()
             pos = qr_start
             while pos < qr_end:
-                matches = starts.get(pos, None)
+                matches = starts.get(pos)
                 if matches:
                     min_length, _ridentifier = matches[0]
                     if len(positions) >= min_length:
@@ -665,9 +664,7 @@ class QueryRun(object):
         self._high_matchables = None
 
     def __len__(self):
-        if self.end is None:
-            return 0
-        return self.end - self.start + 1
+        return 0 if self.end is None else self.end - self.start + 1
 
     def __repr__(self, trace_repr=TRACE_REPR):
         base = (
@@ -694,9 +691,7 @@ class QueryRun(object):
         """
         Return the sequence of known token ids for this run.
         """
-        if self.end is None:
-            return []
-        return self.query.tokens[self.start: self.end + 1]
+        return [] if self.end is None else self.query.tokens[self.start: self.end + 1]
 
     # FIXME: this is not used anywhere except for tests
     def tokens_with_unknowns(self):
@@ -733,11 +728,7 @@ class QueryRun(object):
         Optinally if `include_low`m include low tokens.
         If a list of `qspans` is provided, their positions are also subtracted.
         """
-        if include_low:
-            matchables = self.matchables
-        else:
-            matchables = self.high_matchables
-
+        matchables = self.matchables if include_low else self.high_matchables
         if self.is_digits_only():
             return False
 
@@ -763,10 +754,14 @@ class QueryRun(object):
         Return -1 for positions with non-matchable tokens.
         """
         high_matchables = self.high_matchables
-        if not high_matchables:
-            return []
-        return (tid if pos in self.matchables else -1
-                for pos, tid in self.tokens_with_pos())
+        return (
+            (
+                tid if pos in self.matchables else -1
+                for pos, tid in self.tokens_with_pos()
+            )
+            if high_matchables
+            else []
+        )
 
     @property
     def low_matchables(self):
@@ -821,11 +816,12 @@ class QueryRun(object):
             return ' '.join(tks)
 
         if brief and len(self.tokens) > 10:
-            tokens = tokens_string(self.tokens[:5]) + ' ... ' + tokens_string(self.tokens[-5:])
+            tokens = f'{tokens_string(self.tokens[:5])} ... {tokens_string(self.tokens[-5:])}'
+
             high_tokens = ''
         else:
             tokens = tokens_string(self.tokens)
-            high_tokens = set(t for t in self.tokens if t < self.len_legalese)
+            high_tokens = {t for t in self.tokens if t < self.len_legalese}
             high_tokens = tokens_string(high_tokens, sort=True)
 
         to_dict = dict(

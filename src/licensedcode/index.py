@@ -470,18 +470,23 @@ class LicenseIndex(object):
         msg = 'Cannot support more than licensedcode.index.MAX_TOKENS: %d' % MAX_TOKENS
         assert len_tokens <= MAX_TOKENS, msg
 
-        dupe_rules = [rules for rules in dupe_rules_by_hash.values() if len(rules) > 1]
-        if dupe_rules:
+        if dupe_rules := [
+            rules for rules in dupe_rules_by_hash.values() if len(rules) > 1
+        ]:
             dupe_rule_paths = [
                 '\n'.join(
-                    sorted([
-                        ('file://' + rule.text_file)
-                        if rule.text_file
-                        else ('text: ' + rule.stored_text)
-                            for rule in rules])
+                    sorted(
+                        [
+                            f'file://{rule.text_file}'
+                            if rule.text_file
+                            else f'text: {rule.stored_text}'
+                            for rule in rules
+                        ]
                     )
+                )
                 for rules in dupe_rules
             ]
+
             msg = ('Duplicate rules: \n' + '\n\n'.join(dupe_rule_paths))
             raise AssertionError(msg)
 
@@ -492,7 +497,7 @@ class LicenseIndex(object):
         """
         Log debug-level data for a list of `matches`.
         """
-        logger_debug(message + ':', len(matches))
+        logger_debug(f'{message}:', len(matches))
         if qry:
             # set line early to ease debugging
             match.set_lines(matches, qry.line_by_pos)
@@ -501,7 +506,7 @@ class LicenseIndex(object):
             for m in matches:
                 logger_debug(m)
         else:
-            logger_debug(message + ' MATCHED TEXTS')
+            logger_debug(f'{message} MATCHED TEXTS')
 
             from licensedcode.tracing import get_texts
 
@@ -550,14 +555,12 @@ class LicenseIndex(object):
                     'detectable_text:', detectable_text,
                 )
 
-            spdx_match = match_spdx_lid.spdx_id_match(
+            if spdx_match := match_spdx_lid.spdx_id_match(
                 idx=self,
                 query_run=query_run,
                 text=detectable_text,
                 expression_symbols=expression_symbols,
-            )
-
-            if spdx_match:
+            ):
                 query_run.subtract(spdx_match.qspan)
                 matches.append(spdx_match)
 
@@ -625,18 +628,14 @@ class LicenseIndex(object):
 
         # first check if the whole file may be close, near-dupe match
         whole_query_run = query.whole_query_run()
-        near_dupe_candidates = match_set.compute_candidates(
+        if near_dupe_candidates := match_set.compute_candidates(
             query_run=whole_query_run,
             idx=self,
             matchable_rids=matchable_rids,
             top=MAX_NEAR_DUPE_CANDIDATES,
             high_resemblance=True,
             _use_bigrams=USE_BIGRAM_MULTISETS,
-        )
-
-        # if near duplicates, we only match the whole file at once against these
-        # candidates
-        if near_dupe_candidates:
+        ):
             if TRACE_APPROX_CANDIDATES:
                 logger_debug('get_query_run_approximate_matches: near dupe candidates:')
                 for rank, ((sv1, sv2), _rid, can, _inter) in enumerate(near_dupe_candidates, 1):
@@ -759,16 +758,11 @@ class LicenseIndex(object):
                 matches_end = max(m.qend for m in rule_matches)
                 matches.extend(rule_matches)
 
-                if matches_end + 1 < query_run.end:
-                    start_offset = matches_end + 1
-                    continue
-                else:
+                if matches_end + 1 >= query_run.end:
                     break
 
-                # break if deadline has passed
-                if time() > deadline:
-                    break
-
+                start_offset = matches_end + 1
+                continue
             # break if deadline has passed
             if time() > deadline:
                 break

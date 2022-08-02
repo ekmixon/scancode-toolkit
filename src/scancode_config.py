@@ -49,20 +49,15 @@ def _create_dir(location):
     try:
         os.makedirs(location)
 
-    # avoid multi-process TOCTOU conditions when creating dirs
-    # the directory may have been created since the exist check
     except WindowsError as e:
-        # [Error 183] Cannot create a file when that file already exists
-        if e and e.winerror == 183:
-            if not os.path.isdir(location):
-                raise
-        else:
+        if not e or e.winerror != 183:
+            raise
+        if not os.path.isdir(location):
             raise
     except (IOError, OSError) as o:
-        if o.errno == errno.EEXIST:
-            if not os.path.isdir(location):
-                raise
-        else:
+        if o.errno != errno.EEXIST:
+            raise
+        if not os.path.isdir(location):
             raise
 
 ################################################################################
@@ -158,5 +153,5 @@ if not __scancode_temp_base_dir:
         __scancode_temp_base_dir = system_temp_dir
 
 _create_dir(__scancode_temp_base_dir)
-_prefix = 'scancode-tk-' + __version__ + '-'
+_prefix = f'scancode-tk-{__version__}-'
 scancode_temp_dir = tempfile.mkdtemp(prefix=_prefix, dir=__scancode_temp_base_dir)

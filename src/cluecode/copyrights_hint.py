@@ -15,7 +15,7 @@ import re
 # This is a year between 1960 and today prefixed and suffixed with
 # either a white-space or some punctuation.
 
-all_years = tuple(str(year) for year in range(1960, datetime.today().year))
+all_years = tuple(str(year) for year in range(1960, datetime.now().year))
 years = r'[\(\.,\-\)\s]+(' + '|'.join(all_years) + r')([\(\.,\-\)\s]+|$)'
 
 years = re.compile(years).findall

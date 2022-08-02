@@ -22,9 +22,9 @@ def as_json(results, pretty=True):
 
     kwargs = dict(encoding='utf-8')
     if pretty:
-        kwargs.update(dict(indent=2 * b' '))
+        kwargs |= dict(indent=2 * b' ')
     else:
-        kwargs.update(dict(separators=(b',', b':',)))
+        kwargs |= dict(separators=(b',', b':',))
     return json.dumps(results, **kwargs) + b'\n'
 
 
@@ -42,4 +42,4 @@ if __name__ == '__channelexec__':
         elif isinstance(kwargs, dict):
             channel.send(run_scan(**kwargs))  # NOQA
         else:
-            raise Exception('Unknown arguments type: ' + repr(kwargs))
+            raise Exception(f'Unknown arguments type: {repr(kwargs)}')

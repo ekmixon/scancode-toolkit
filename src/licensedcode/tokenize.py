@@ -33,10 +33,7 @@ def query_lines(location=None, query_string=None, strip=True):
     if location:
         numbered_lines = numbered_text_lines(location, demarkup=False)
     elif query_string:
-        if strip:
-            keepends = False
-        else:
-            keepends = True
+        keepends = not strip
         numbered_lines = enumerate(query_string.splitlines(keepends), 1)
 
     for line_number, line in numbered_lines:
@@ -229,10 +226,8 @@ def select_ngrams(ngrams, with_pos=False):
         if min_hash in (nghs[0], nghs[-1]):
             yield ngram
             last = ngram
-        else:
-            # always yield the first or last ngram too.
-            if pos == 0:
-                yield ngram
-                last = ngram
+        elif pos == 0:
+            yield ngram
+            last = ngram
     if last != ngram:
         yield ngram

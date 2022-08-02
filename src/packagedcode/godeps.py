@@ -126,18 +126,19 @@ class Godep(object):
     def parse_deps(self, deps):
         deps_list = []
         for dep in deps:
-            data = dict((NAMES[key], value) for key, value in dep.items())
+            data = {NAMES[key]: value for key, value in dep.items()}
             deps_list.append(Dep(**data))
         return deps_list or []
 
     def to_dict(self):
         dct = {}
-        dct.update([
+        dct |= [
             ('import_path', self.import_path),
             ('go_version', self.go_version),
             ('packages', self.packages),
             ('dependencies', [d._asdict() for d in self.dependencies]),
-        ])
+        ]
+
         return dct
 
     def __repr__(self):

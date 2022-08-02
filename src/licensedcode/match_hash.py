@@ -71,7 +71,7 @@ def hash_match(idx, query_run, **kwargs):
         len_legalese = idx.len_legalese
         logger_debug('match_hash: Match:', rule.identifier)
         qspan = Span(range(query_run.start, query_run.end + 1))
-        ispan = Span(range(0, rule.length))
+        ispan = Span(range(rule.length))
         hispan = Span(p for p in ispan if itokens[p] < len_legalese)
         match = LicenseMatch(rule, qspan, ispan, hispan, query_run.start, matcher=MATCH_HASH, query=query_run.query)
         matches.append(match)

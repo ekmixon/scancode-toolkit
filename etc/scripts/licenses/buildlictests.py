@@ -37,12 +37,11 @@ def load_data(location='00-new-license-tests.txt'):
         data = [l.strip() for l in o.read().splitlines(False)]
     lines = []
     for line in data:
-        if not line:
-            if lines:
-                yield '\n'.join(lines)
-                lines = []
-        else:
+        if line:
             lines.append(line)
+        elif lines:
+            yield '\n'.join(lines)
+            lines = []
     if lines:
         yield '\n'.join(lines)
 
@@ -80,10 +79,7 @@ def build_dupe_index():
     """
     Return a set of existing license tests texts (to avoid duplication)
     """
-    existing = set()
-    for test in get_all_tests():
-        existing.add(test.get_content())
-    return existing
+    return {test.get_content() for test in get_all_tests()}
 
 
 def build_test(text):
@@ -99,17 +95,14 @@ def build_test(text):
     idx = cache.get_index()
     matches = idx.match(query_string=text) or []
     detected_expressions = [match.rule.license_expression for match in matches]
-    notes = ''
-    if not detected_expressions:
-        notes = 'No license should be detected'
-
+    notes = '' if detected_expressions else 'No license should be detected'
     lt = LicenseTest(
         test_file=test_file,
         license_expressions=detected_expressions,
         notes=notes
     )
 
-    lt.data_file = test_file + '.yml'
+    lt.data_file = f'{test_file}.yml'
     return lt
 
 

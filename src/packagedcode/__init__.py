@@ -97,11 +97,9 @@ if len(PACKAGES_BY_TYPE) != len(PACKAGE_TYPES):
     seen_types = {}
     for pt in PACKAGE_TYPES:
         assert pt.default_type
-        seen = seen_types.get(pt.default_type)
-        if seen:
-            msg = ('Invalid duplicated packagedcode.Package types: '
-                   '"{}:{}" and "{}:{}" have the same type.'
-                  .format(pt.default_type, pt.__name__, seen.default_type, seen.__name__,))
+        if seen := seen_types.get(pt.default_type):
+            msg = f'Invalid duplicated packagedcode.Package types: "{pt.default_type}:{pt.__name__}" and "{seen.default_type}:{seen.__name__}" have the same type.'
+
             raise Exception(msg)
         else:
             seen_types[pt.default_type] = pt
@@ -161,12 +159,13 @@ def get_package_instance(scan_data):
 
     # these are computed attributes serialized on a package
     # that should not be recreated when serializing
-    computed_attributes = set([
+    computed_attributes = {
         'purl',
         'repository_homepage_url',
         'repository_download_url',
-        'api_data_url'
-    ])
+        'api_data_url',
+    }
+
 
     # re-hydrate lists of typed objects
     klas = get_package_class(scan_data)
@@ -182,17 +181,16 @@ def get_package_instance(scan_data):
         field = existing_fields.get(key)
 
         if not field:
-            if key not in extra_data:
-                # keep unknown field as extra data
-                extra_data[key] = value
-                continue
-            else:
+            if key in extra_data:
                 raise Exception(
                     f'Invalid scan_data with duplicated key: {key}={value!r} '
                     f'present both as attribute AND as extra_data: '
                     f'{key}={extra_data[key]!r}'
                 )
 
+            # keep unknown field as extra data
+            extra_data[key] = value
+            continue
         list_field_type = list_field_types_by_name.get(key)
         if not list_field_type:
             # this is a plain known field

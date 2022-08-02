@@ -210,14 +210,17 @@ class LicenseMatch(object):
         Strict inequality is based on licensing, matched positions and not based
         on matched rule.
         """
-        if not isinstance(other, LicenseMatch):
-            return True
-
-        return not all([
-            self.same_licensing(other),
-            self.qspan == other.qspan,
-            self.ispan == other.ispan,
-        ])
+        return (
+            not all(
+                [
+                    self.same_licensing(other),
+                    self.qspan == other.qspan,
+                    self.ispan == other.ispan,
+                ]
+            )
+            if isinstance(other, LicenseMatch)
+            else True
+        )
 
     def same_licensing(self, other):
         """
@@ -302,9 +305,7 @@ class LicenseMatch(object):
         Return the coverage of this match to the matched rule as a float between
         0 and 1.
         """
-        if not self.rule.length:
-            return 0
-        return self.len() / self.rule.length
+        return self.len() / self.rule.length if self.rule.length else 0
 
     def coverage(self):
         """
@@ -358,13 +359,9 @@ class LicenseMatch(object):
         Return True if this match query contains stopwords between its start and end
         in the query. Stopwords are never match by construction.
         """
-        # The query side of the match may not be contiguous and may contain
-        # unmatched stopword tokens.
-        query = self.query
-        qspan = self.qspan
+        if query := self.query:
+            qspan = self.qspan
 
-        # note: to avoid breaking many tests we check query presence
-        if query:
             qspe = qspan.end
             # Count stopword tokens that are inside the matched range, ignoring
             # end position of the query span. This is used to check if there are
@@ -395,9 +392,7 @@ class LicenseMatch(object):
         if not mlen:
             return 0
         qmagnitude = self.qmagnitude()
-        if not qmagnitude:
-            return 0
-        return mlen / qmagnitude
+        return mlen / qmagnitude if qmagnitude else 0
 
     def idensity(self):
         """
@@ -470,15 +465,15 @@ class LicenseMatch(object):
         else:
             newmatcher = self.matcher
 
-        combined = LicenseMatch(
+        return LicenseMatch(
             rule=self.rule,
             qspan=Span(self.qspan | other.qspan),
             ispan=Span(self.ispan | other.ispan),
             hispan=Span(self.hispan | other.hispan),
             query_run_start=min(self.query_run_start, other.query_run_start),
             matcher=newmatcher,
-            query=self.query)
-        return combined
+            query=self.query,
+        )
 
     def update(self, other):
         """
@@ -539,8 +534,7 @@ class LicenseMatch(object):
         Return a hash from the matched itoken ids.
         """
         from licensedcode.match_hash import index_hash
-        itokens = list(self.itokens(idx))
-        if itokens:
+        if itokens := list(self.itokens(idx)):
             return index_hash(itokens)
 
     # FIXME: this should be done for all the matches found in a given scanned
@@ -729,8 +723,9 @@ def merge_matches(matches, max_dist=None):
                 and current_match.qend <= next_match.qend
                 and current_match.istart <= next_match.istart
                 and current_match.iend <= next_match.iend):
-                    qoverlap = current_match.qspan.overlap(next_match.qspan)
-                    if qoverlap:
+                    if qoverlap := current_match.qspan.overlap(
+                        next_match.qspan
+                    ):
                         ioverlap = current_match.ispan.overlap(next_match.ispan)
                         # only merge if overlaps are equals (otherwise they are not aligned)
                         if qoverlap == ioverlap:

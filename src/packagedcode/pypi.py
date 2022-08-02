@@ -131,8 +131,7 @@ def parse(location):
 
     # try all available parser in a well defined order
     for parser in parsers:
-        package = parser(location)
-        if package:
+        if package := parser(location):
             return package
 
 
@@ -192,8 +191,7 @@ def parse_archive(location):
     if not location or not location.endswith(bdist_file_suffixes):
         return
 
-    metafile = find_archive_metafile(location)
-    if metafile:
+    if metafile := find_archive_metafile(location):
         return parse_metadata(metafile)
 
 
@@ -279,8 +277,7 @@ def parse_dependency_file(location):
     if not location:
         return
 
-    dt = get_dparse_dependency_type(fileutils.file_name(location))
-    if dt:
+    if dt := get_dparse_dependency_type(fileutils.file_name(location)):
         dependent_packages = parse_with_dparse(location)
         return PythonPackage(dependencies=dependent_packages)
 
@@ -291,9 +288,7 @@ def parse_pipfile_lock(location):
     """
     if not location or not location.endswith('Pipfile.lock'):
         return
-    with open(location) as f:
-        content = f.read()
-
+    content = Path(location).read_text()
     data = json.loads(content)
 
     sha256 = None
@@ -362,10 +357,10 @@ def get_description(metainfo, location=None):
     if not description:
         # legacymetadata versions use the Description for the description
         description = get_attribute(metainfo, 'Description')
-        if not description and location:
-            # older metadata versions can use a DESCRIPTION.rst file
-            description = get_legacy_description(
-                fileutils.parent_directory(location))
+    if not description and location:
+        # older metadata versions can use a DESCRIPTION.rst file
+        description = get_legacy_description(
+            fileutils.parent_directory(location))
 
     summary = get_attribute(metainfo, 'Summary')
     return build_description(summary, description)
@@ -390,7 +385,7 @@ def get_declared_license(metainfo):
     # TODO: We should make the declared license as it is, this should be
     # updated in scancode to parse a pure string
     lic = get_attribute(metainfo, 'License')
-    if lic and not lic == 'UNKNOWN':
+    if lic and lic != 'UNKNOWN':
         declared_license['license'] = lic
 
     license_classifiers, _ = get_classifiers(metainfo)
@@ -427,13 +422,10 @@ def get_keywords(metainfo):
     Return a list of keywords found in a ``metainfo`` object or mapping.
     """
     keywords = []
-    kws = get_attribute(metainfo, 'Keywords') or []
-    if kws:
+    if kws := get_attribute(metainfo, 'Keywords') or []:
         if isinstance(kws, str):
             kws = kws.split(',')
-        elif isinstance(kws, (list, tuple)):
-            pass
-        else:
+        elif not isinstance(kws, (list, tuple)):
             kws = [repr(kws)]
         kws = [k.strip() for k in kws if k and k.strip()]
         keywords.extend(kws)
@@ -543,9 +535,8 @@ def get_requires_dependencies(requires, default_scope='install'):
         # .operator and .version property
         # a packaging.specifiers.SpecifierSet
         specifiers_set = req.specifier  # a list of packaging.specifiers.Specifier
-        specifiers = specifiers_set._specs
         requirement = None
-        if specifiers:
+        if specifiers := specifiers_set._specs:
             # SpecifierSet stringifies to comma-separated sorted Specifiers
             requirement = str(specifiers_set)
             # are we pinned e.g. resolved? this is true if we have a single
@@ -583,7 +574,7 @@ def get_extra(marker):
 
     for mark in marks:
         # filter for variable(extra) == value tuples of (Variable, Op, Value)
-        if not isinstance(mark, tuple) and not len(mark) == 3:
+        if not isinstance(mark, tuple) and len(mark) != 3:
             continue
 
         variable, operator, value = mark
@@ -657,8 +648,7 @@ def parse_with_dparse(location):
     manifest such as requirements.txt, Conda manifest or Pipfile.lock files, or
     return an empty list.
     """
-    is_dir = filetype.is_dir(location)
-    if is_dir:
+    if is_dir := filetype.is_dir(location):
         return
 
     file_name = fileutils.file_name(location)
@@ -667,9 +657,7 @@ def parse_with_dparse(location):
     if not dependency_type:
         return
 
-    with open(location) as f:
-        content = f.read()
-
+    content = Path(location).read_text()
     dep_file = dparse.parse(content, file_type=dependency_type)
     if not dep_file:
         return []
@@ -690,10 +678,7 @@ def parse_with_dparse(location):
 
         # a packaging.specifiers.SpecifierSet
         specifiers_set = dependency.specs
-        # a list of packaging.specifiers.Specifier
-        specifiers = specifiers_set._specs
-
-        if specifiers:
+        if specifiers := specifiers_set._specs:
             # SpecifierSet stringifies to comma-separated sorted Specifiers
             requirement = str(specifiers_set)
             # are we pinned e.g. resolved?
@@ -722,9 +707,7 @@ def get_setup_py_args(location):
     """
     Return a mapping of arguments passed to a setup.py setup() function.
     """
-    with open(location) as inp:
-        setup_text = inp.read()
-
+    setup_text = Path(location).read_text()
     setup_args = {}
 
     # Parse setup.py file and traverse the AST
@@ -882,9 +865,8 @@ def find_pattern(location, pattern):
     with io.open(location, encoding='utf8') as fp:
         content = fp.read()
 
-    match = re.search(pattern, content)
-    if match:
-        return match.group(1).strip()
+    if match := re.search(pattern, content):
+        return match[1].strip()
 
 
 def find_dunder_version(location):
@@ -984,47 +966,44 @@ def detect_version_attribute(setup_location):
     has_src = os.path.exists(src_dir)
 
     if segments:
-        for n in special_names:
-            candidate_locs.append(segments + [n])
+        candidate_locs.extend(segments + [n] for n in special_names)
         if has_src:
-            for n in special_names:
-                candidate_locs.append(['src'] + segments + [n])
-
+            candidate_locs.extend(['src'] + segments + [n] for n in special_names)
         if len(segments) > 1:
             heads = segments[:-1]
             tail = segments[-1]
-            candidate_locs.append(heads + [tail + '.py'])
+            candidate_locs.append(heads + [f'{tail}.py'])
             if has_src:
-                candidate_locs.append(['src'] + heads + [tail + '.py'])
+                candidate_locs.append(['src'] + heads + [f'{tail}.py'])
 
         else:
             seg = segments[0]
-            candidate_locs.append([seg + '.py'])
+            candidate_locs.append([f'{seg}.py'])
             if has_src:
-                candidate_locs.append(['src', seg + '.py'])
+                candidate_locs.append(['src', f'{seg}.py'])
 
     candidate_locs = [
         os.path.join(setup_py_dir, *cand_loc_segs)
         for cand_loc_segs in candidate_locs
     ]
 
-    for fl in get_module_scripts(
-        location=setup_py_dir,
-        max_depth=4,
-        interesting_names=special_names,
-    ):
-        candidate_locs.append(fl)
+    candidate_locs.extend(
+        iter(
+            get_module_scripts(
+                location=setup_py_dir,
+                max_depth=4,
+                interesting_names=special_names,
+            )
+        )
+    )
 
     if TRACE:
         for loc in candidate_locs:
             logger_debug('    can loc:', loc)
 
-    version = detect_version_in_locations(
-        candidate_locs=candidate_locs,
-        detector=find_dunder_version
-    )
-
-    if version:
+    if version := detect_version_in_locations(
+        candidate_locs=candidate_locs, detector=find_dunder_version
+    ):
         return version
 
     return detect_version_in_locations(
@@ -1103,14 +1082,14 @@ def compute_normalized_license(declared_license):
             continue
         # The value could be a string or a list
         if isinstance(value, str):
-            detected_license = models.compute_normalized_license(value)
-            if detected_license:
+            if detected_license := models.compute_normalized_license(value):
                 detected_licenses.append(detected_license)
         else:
             # this is a list
             for declared in value:
-                detected_license = models.compute_normalized_license(declared)
-                if detected_license:
+                if detected_license := models.compute_normalized_license(
+                    declared
+                ):
                     detected_licenses.append(detected_license)
 
     if detected_licenses:

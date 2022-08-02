@@ -140,25 +140,19 @@ def parse(location):
         description = build_description(nuspec.get('title') , description)
 
     parties = []
-    authors = nuspec.get('authors')
-    if authors:
+    if authors := nuspec.get('authors'):
         parties.append(models.Party(name=authors, role='author'))
 
-    owners = nuspec.get('owners')
-    if owners:
+    if owners := nuspec.get('owners'):
         parties.append(models.Party(name=owners, role='owner'))
 
     repo = nuspec.get('repository') or {}
     vcs_tool = repo.get('@type') or ''
-    vcs_repository = repo.get('@url') or ''
-    vcs_url =None
-    if vcs_repository:
-        if vcs_tool:
-            vcs_url = '{}+{}'.format(vcs_tool, vcs_repository)
-        else:
-            vcs_url = vcs_repository
-
-    package = NugetPackage(
+    if vcs_repository := repo.get('@url') or '':
+        vcs_url = f'{vcs_tool}+{vcs_repository}' if vcs_tool else vcs_repository
+    else:
+        vcs_url = None
+    return NugetPackage(
         name=name,
         version=version,
         description=description or None,
@@ -168,4 +162,3 @@ def parse(location):
         copyright=nuspec.get('copyright') or None,
         vcs_url=vcs_url,
     )
-    return package
